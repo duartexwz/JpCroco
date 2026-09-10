@@ -46,7 +46,7 @@ export default function ProductModal({ produto, onClose }) {
           <button className="icon-btn" onClick={() => onClose(false)}>✕</button>
         </div>
         <div className="drawer-body">
-          <div className="product-img" style={{ borderRadius: 14, aspectRatio: '4/3' }}>
+          <div className="product-img product-img-full" style={{ borderRadius: 14, aspectRatio: '4/3' }}>
             {imagens[imgIdx] ? <SafeImg src={imagens[imgIdx]} alt={produto.nome} /> : <span>🐊</span>}
           </div>
           {produto.cor && !coresDisponiveis.length && (
