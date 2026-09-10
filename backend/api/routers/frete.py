@@ -1,10 +1,17 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
-from typing import Optional
+from typing import Annotated, Optional
 
+import asyncpg
+
+from api.database import get_db
+from api.security import get_current_admin
 from api.services.correios import calcular_frete, peso_taxavel, validar_dimensoes
 
 router = APIRouter(prefix='/frete', tags=['frete'])
+
+dbConnection = Annotated[asyncpg.Connection, Depends(get_db)]
+AdminUser = Annotated[dict, Depends(get_current_admin)]
 
 # DF (70/71 e parte de 73) e cidades do Entorno atendidas localmente (72/73).
 # Para esses CEPs a loja não deve consultar nem expor dados dos Correios.
@@ -71,7 +78,7 @@ def _extrair_valor_prazo(resposta: dict, co_produto: str, fallback_valor: float,
 
 
 @router.post('/calcular')
-async def calcular(req: CalcularFreteRequest):
+async def calcular(req: CalcularFreteRequest, db: dbConnection):
     try:
         cep_num = "".join(c for c in req.cepDestino if c.isdigit())
         if len(cep_num) != 8:
@@ -121,6 +128,7 @@ async def calcular(req: CalcularFreteRequest):
                 opcoes = await calcular_me(
                     req.cepDestino, ps, comp, larg, alt,
                     valor_declarado=float(req.vlDeclarado or 0),
+                    db=db,
                 )
             except Exception as e:
                 # Cai para o Correios/mock abaixo em vez de quebrar o checkout
@@ -188,6 +196,104 @@ async def calcular(req: CalcularFreteRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+
+class EtiquetaRequest(BaseModel):
+    service_id: int  # ex: 1 PAC, 2 SEDEX, 3 Jadlog Package, 4 Jadlog Com
+
+
+@router.post('/etiqueta/{pedido_id}')
+async def gerar_etiqueta(pedido_id: int, body: EtiquetaRequest, db: dbConnection, admin: AdminUser, background: BackgroundTasks):
+    """Compra a etiqueta no Melhor Envio (cobra a carteira!), salva o
+    rastreio e marca Enviado — cliente é notificado sozinho."""
+    from api.services import melhorenvio as me
+    from api.services.notificacao import notificar_rastreio
+
+    pedido = await db.fetchrow('SELECT * FROM pedidos WHERE id = $1', pedido_id)
+    if not pedido:
+        raise HTTPException(status_code=404, detail='Pedido não encontrado')
+    pedido = dict(pedido)
+    if (pedido.get('status') or '').lower() not in ('pago', 'aprovado', 'approved'):
+        raise HTTPException(status_code=400, detail='Etiqueta só após o pagamento (pedido precisa estar Pago).')
+    if pedido.get('codigo_rastreio'):
+        raise HTTPException(status_code=400, detail='Pedido já tem rastreio.')
+
+    cliente = await db.fetchrow('SELECT nome, email, telefone, cpf FROM clientes WHERE id = $1', pedido.get('cliente_id'))
+    if not cliente:
+        raise HTTPException(status_code=400, detail='Cliente do pedido não encontrado.')
+    cliente = dict(cliente)
+    try:
+        destino = me.parse_endereco(pedido.get('endereco_entrega') or '')
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    doc_cli = ''.join(c for c in (cliente.get('cpf') or '') if c.isdigit())
+    para = {
+        'name': (cliente.get('nome') or 'Cliente')[:60],
+        'phone': ''.join(c for c in (cliente.get('telefone') or '') if c.isdigit()),
+        'email': cliente.get('email') or '',
+        'document': doc_cli,
+        **destino,
+    }
+
+    itens = await db.fetch(
+        '''SELECT i.quantidade, i.preco_unitario, p.nome, p.peso_gramas,
+                  p.comprimento, p.largura, p.altura
+           FROM itens_pedido i JOIN produtos p ON p.id = i.produto_id
+           WHERE i.pedido_id = $1''',
+        pedido_id,
+    )
+    if not itens:
+        raise HTTPException(status_code=400, detail='Pedido sem itens.')
+    produtos, peso_total, max_c, max_l, soma_a = [], 0, 20, 15, 0
+    for it in itens:
+        qtd = it['quantidade'] or 1
+        produtos.append({'name': (it['nome'] or 'Produto')[:60], 'quantity': qtd, 'unitary_value': float(it['preco_unitario'] or 0)})
+        peso_total += (it['peso_gramas'] or 500) * qtd
+        max_c = max(max_c, it['comprimento'] or 20)
+        max_l = max(max_l, it['largura'] or 15)
+        soma_a += (it['altura'] or 10) * qtd
+    volume = {'height': min(soma_a, 100), 'width': max_l, 'length': max_c, 'weight': max(round(peso_total / 1000, 2), 0.01)}
+
+    try:
+        etq = await me.comprar_etiqueta(
+            body.service_id, para, produtos, volume,
+            seguro=float(pedido.get('valor_total') or 0),
+            pedido_ref=pedido.get('id_pedido') or f'#{pedido_id}',
+            db=db,
+        )
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    atualizado = await db.fetchrow(
+        """UPDATE pedidos SET codigo_rastreio = $1, status = 'Enviado', data_envio = NOW()
+           WHERE id = $2 RETURNING id, id_pedido, status, codigo_rastreio, transportadora, cliente_id""",
+        etq['tracking'], pedido_id,
+    )
+    try:
+        background.add_task(notificar_rastreio, cliente, dict(atualizado))
+    except Exception:
+        pass
+    return {'tracking': etq['tracking'], 'label_url': etq['label_url'], 'order_id': etq['order_id']}
+
+
+@router.get('/oauth/url')
+async def oauth_url(db: dbConnection, admin: AdminUser):
+    """Devolve a URL de autorização OAuth (admin clica, autoriza no ME)."""
+    from api.services import melhorenvio as me
+    return {'authorize_url': me.authorize_url()}
+
+
+@router.get('/oauth/callback')
+async def oauth_callback(code: str | None = None, db: dbConnection = None):
+    """Retorno OAuth do Melhor Envio: troca o code pelos tokens e salva."""
+    from api.services import melhorenvio as me
+    if not code:
+        raise HTTPException(status_code=400, detail='Parâmetro code ausente.')
+    try:
+        dados = await me.trocar_code(code, db)
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {'ok': True, 'expira_em': dados.get('expira_em')}
 
 
 @router.get('/melhorenvio-webhook')

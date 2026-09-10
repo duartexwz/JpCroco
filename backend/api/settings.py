@@ -34,9 +34,34 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = 'http://localhost:8080,http://127.0.0.1:8080, http://localhost:5500'
     WEBHOOK_URL: str = ''
 
+    # Melhor Envio (produção) — cálculo/etiquetas sem contrato próprio
+    MELHORENVIO_TOKEN: str = ''
+    MELHORENVIO_CLIENT_ID: str = ''
+    MELHORENVIO_CLIENT_SECRET: str = ''
+    MELHORENVIO_REDIRECT_URI: str = 'https://jpcroco.vercel.app/api/frete/oauth/callback'
+    MELHORENVIO_API_URL: str = 'https://www.melhorenvio.com.br/api/v2'
+    MELHORENVIO_EMAIL: str = ''
+    # Filtrar serviços por id (ex: '1,2'). Vazio = todos.
+    MELHORENVIO_SERVICES: str = ''
+    # Remetente da etiqueta (fase 2)
+    MELHORENVIO_FROM_NOME: str = ''
+    MELHORENVIO_FROM_DOCUMENTO: str = ''
+    MELHORENVIO_FROM_ENDERECO: str = ''
+    MELHORENVIO_FROM_NUMERO: str = ''
+    MELHORENVIO_FROM_COMPLEMENTO: str = ''
+    MELHORENVIO_FROM_BAIRRO: str = ''
+    MELHORENVIO_FROM_CIDADE: str = ''
+    MELHORENVIO_FROM_UF: str = ''
+    MELHORENVIO_FROM_CEP: str = ''
+    MELHORENVIO_FROM_TELEFONE: str = ''
+    MELHORENVIO_FROM_EMAIL: str = ''
     # Correios CWS
     CORREIOS_USER: str = ''
     CORREIOS_SENHA: str = ''
+    # Cartão de postagem (obrigatório p/ Preço/Prazo) + contrato/DR opcionais.
+    CORREIOS_CARTAO: str = ''
+    CORREIOS_CONTRATO: str = ''
+    CORREIOS_DR: str = ''
     CORREIOS_CEP_ORIGEM: str = '70002900'
     CORREIOS_TOKEN_URL: str = 'https://apihom.correios.com.br/token/v1/autentica'
     CORREIOS_PRECO_URL: str = 'https://apihom.correios.com.br/preco/v1/nacional'

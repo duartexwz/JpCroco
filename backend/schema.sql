@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict jG9nAhfXLGxLm4Auwk2fYYqyqdjwW67CuPMrvG0mcPMfBKDSH0RmNtTRe0thugF
+\restrict QQ9CaRTdeSxdnJZYkpzQy2liBLgoSKUcqLnoUMv7nJnMMNcEgwfDh65czhNoaEL
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -178,6 +178,22 @@ ALTER SEQUENCE public.itens_pedido_id_seq OWNER TO loja_admin;
 
 ALTER SEQUENCE public.itens_pedido_id_seq OWNED BY public.itens_pedido.id;
 
+
+--
+-- Name: melhorenvio_tokens; Type: TABLE; Schema: public; Owner: loja_admin
+--
+
+CREATE TABLE public.melhorenvio_tokens (
+    id integer DEFAULT 1 NOT NULL,
+    access_token text NOT NULL,
+    refresh_token text DEFAULT ''::text NOT NULL,
+    expires_at timestamp without time zone,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT melhorenvio_tokens_id_check CHECK ((id = 1))
+);
+
+
+ALTER TABLE public.melhorenvio_tokens OWNER TO loja_admin;
 
 --
 -- Name: pedidos; Type: TABLE; Schema: public; Owner: loja_admin
@@ -505,6 +521,14 @@ ALTER TABLE ONLY public.itens_pedido
 
 
 --
+-- Name: melhorenvio_tokens melhorenvio_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: loja_admin
+--
+
+ALTER TABLE ONLY public.melhorenvio_tokens
+    ADD CONSTRAINT melhorenvio_tokens_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: pedidos pedidos_id_pedido_key; Type: CONSTRAINT; Schema: public; Owner: loja_admin
 --
 
@@ -642,5 +666,5 @@ ALTER TABLE ONLY public.produto_tamanhos
 -- PostgreSQL database dump complete
 --
 
-\unrestrict jG9nAhfXLGxLm4Auwk2fYYqyqdjwW67CuPMrvG0mcPMfBKDSH0RmNtTRe0thugF
+\unrestrict QQ9CaRTdeSxdnJZYkpzQy2liBLgoSKUcqLnoUMv7nJnMMNcEgwfDh65czhNoaEL
 
