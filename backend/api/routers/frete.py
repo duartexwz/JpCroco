@@ -93,21 +93,35 @@ async def calcular(req: CalcularFreteRequest, db: dbConnection):
         validar_dimensoes(comp,larg,alt)
         taxavel = peso_taxavel(ps, comp,larg,alt)
 
-        # Melhor Envio é o único provedor (sem mock: preço chutado cobraria frete errado).
+        # Provedores em ordem: SuperFrete (token de produção) -> Melhor Envio.
+        # Sem mock: preço chutado cobraria frete errado no checkout.
         from api.settings import settings
-        if not settings.MELHORENVIO_TOKEN:
-            raise HTTPException(
-                status_code=502,
-                detail='Frete indisponível: token do Melhor Envio não configurado.',
-            )
+        erros = []
         try:
-            opcoes = await calcular_me(
+            from api.services.superfrete import calcular as calcular_sf
+            opcoes = await calcular_sf(
                 req.cepDestino, ps, comp, larg, alt,
                 valor_declarado=float(req.vlDeclarado or 0),
-                db=db,
             )
         except (ValueError, RuntimeError) as e:
-            raise HTTPException(status_code=502, detail=str(e))
+            erros.append(f'SuperFrete: {e}')
+            opcoes = None
+        if opcoes is None and settings.MELHORENVIO_TOKEN:
+            from api.services.melhorenvio import calcular as calcular_me
+            try:
+                opcoes = await calcular_me(
+                    req.cepDestino, ps, comp, larg, alt,
+                    valor_declarado=float(req.vlDeclarado or 0),
+                    db=db,
+                )
+            except (ValueError, RuntimeError) as e:
+                erros.append(f'Melhor Envio: {e}')
+                opcoes = None
+        if not opcoes:
+            raise HTTPException(
+                status_code=502,
+                detail='Frete indisponível: ' + (' | '.join(erros) if erros else 'sem provedores configurados.'),
+            )
         return {
             'cepDestino': req.cepDestino,
             'pesoReal': ps,
@@ -116,7 +130,7 @@ async def calcular(req: CalcularFreteRequest, db: dbConnection):
             'dimensoes': {'comp': comp, 'larg': larg, 'alt': alt},
             'opcoes': opcoes,
             'mock': False,
-            'provedor': 'melhorenvio',
+            'provedor': 'superfrete' if not erros else 'melhorenvio',
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -196,9 +196,11 @@ select {
   display: grid; place-items: center; font-size: 3rem; overflow: hidden; position: relative;
 }
 .product-img img { width: 100%; height: 100%; object-fit: cover; }
-/* Na modal do produto a foto aparece inteira, sem corte */
-.product-img-full { aspect-ratio: 4/3; background: var(--cinza-100); }
-.product-img-full img { object-fit: contain; }
+/* Na modal do produto a foto aparece inteira, sem corte.
+   display:block (e não grid): com place-items:center o item ignora o
+   height:100% e transborda — o overflow:hidden cortava a foto. */
+.product-img-full { display: block; aspect-ratio: 4/3; background: var(--cinza-100); }
+.product-img-full img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .product-tag {
   position: absolute; top: 10px; left: 10px; font-size: .68rem; font-weight: 800;
   letter-spacing: .08em; text-transform: uppercase; padding: 5px 10px; border-radius: var(--r-full);

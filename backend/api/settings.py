@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     MELHORENVIO_FROM_EMAIL: str = ''
     # CEP de origem das postagens (loja)
     CEP_ORIGEM: str = '72725104'
+    # SuperFrete (produção)
+    SUPERFRETE_TOKEN: str = ''
+    SUPERFRETE_API_URL: str = 'https://api.superfrete.com'
+    SUPERFRETE_EMAIL: str = ''
+    # Filtrar serviços por id (ex: '1,2'). Vazio = todos.
+    SUPERFRETE_SERVICES: str = ''
 
     WHATSAPP_API_URL: str = ''
     WHATSAPP_TOKEN: str = ''
