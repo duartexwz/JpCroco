@@ -34,14 +34,17 @@ def _blob_token() -> str:
 
 
 async def _put_blob(client: httpx.AsyncClient, token: str, filename: str, content: bytes, content_type: str) -> str:
+    # Header EXATO do SDK @vercel/blob: sem 'access' a API assume store
+    # público e um store PRIVADO responde 400. Imagens de vitrine precisam
+    # de um Blob store PÚBLICO (não dá para converter; crie outro no painel).
     try:
         response = await client.put(
             f'{BLOB_API_URL}/{filename}',
             content=content,
             headers={
                 'Authorization': f'Bearer {token}',
+                'x-vercel-blob-access': 'public',
                 'x-content-type': content_type,
-                'x-api-version': '7',
             },
         )
         response.raise_for_status()
@@ -67,6 +70,25 @@ async def _put_blob(client: httpx.AsyncClient, token: str, filename: str, conten
             status_code=HTTPStatus.BAD_GATEWAY,
             detail='Resposta inesperada do Blob.',
         ) from e
+
+
+async def _garantir_legivel(client: httpx.AsyncClient, url: str) -> None:
+    """Confere se a URL salva abre sem login.
+
+    Se o token for de um store PRIVADO, o PUT até passa mas a imagem dá
+    403 no navegador. Melhor falhar aqui com mensagem clara do que salvar
+    URL quebrada no produto.
+    """
+    try:
+        r = await client.get(url, headers={'Range': 'bytes=0-0'})
+        if r.status_code in {200, 206}:
+            return
+    except httpx.HTTPError:
+        pass
+    raise HTTPException(
+        status_code=HTTPStatus.BAD_GATEWAY,
+        detail='Blob salvou mas a URL não é pública (403). Use um Blob store PÚBLICO e atualize BLOB_READ_WRITE_TOKEN.',
+    )
 
 
 @router.post('/imagem', status_code=HTTPStatus.CREATED)
@@ -120,5 +142,6 @@ async def upload_imagem(
             url = await _put_blob(client, token, filename, content, content_type)
             urls.append(url)
             filenames.append(filename)
+        await _garantir_legivel(client, urls[0])
 
     return {'urls': urls, 'url': urls[0], 'filenames': filenames, 'filename': filenames[0]}
