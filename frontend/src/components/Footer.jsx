@@ -24,7 +24,7 @@ export default function Footer() {
           </div>
           <div>
             <h4>Atendimento</h4>
-            <span>contato@jpcroco.com.br</span>
+            <span>jpcroco10@gmail.com</span>
             <span>(61) 99680-3932</span>
             <span>Seg – Sex: 9h às 18h</span>
           </div>
