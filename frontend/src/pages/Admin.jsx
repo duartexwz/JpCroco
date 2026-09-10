@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import ConfirmModal from '../components/ConfirmModal';
 import { useAuth } from '../store/AuthContext';
 import { useToast } from '../store/ToastContext';
 import { useAdminNotify } from '../hooks/useAdminNotify';
@@ -258,7 +259,23 @@ export default function Admin() {
                         <td>{p.stock}</td>
                         <td><div className="row-actions">
                           <button className="mini-btn" onClick={() => setModal({ tipo: 'produto', dados: p })}>Editar</button>
-                          <button className="mini-btn danger" onClick={async () => { if (confirm('Deletar produto?')) { try { await api.deleteProduto(p.id); toast('Produto deletado.', 'success'); carregar('produtos'); } catch (e) { toast(e.message, 'error'); } } }}>Excluir</button>
+                          <button className="mini-btn danger" onClick={() => setModal({
+                            tipo: 'confirmar',
+                            dados: {
+                              titulo: 'Excluir produto?',
+                              mensagem: 'O produto some da loja na hora. Essa ação não pode ser desfeita.',
+                              detalhe: p.nome,
+                              confirmarTexto: 'Excluir produto',
+                              onConfirm: async () => {
+                                try {
+                                  await api.deleteProduto(p.id);
+                                  toast('Produto deletado.', 'success');
+                                  setModal(null);
+                                  carregar('produtos');
+                                } catch (e) { toast(e.message, 'error'); }
+                              },
+                            },
+                          })}>Excluir</button>
                         </div></td>
                       </tr>
                     ))}</tbody></table>
@@ -272,7 +289,23 @@ export default function Admin() {
                 <div className="tabs">{PED_ABAS.map(([v, l]) => <button key={v} className={`tab${aba === v ? ' active' : ''}`} onClick={() => setAba(v)}>{l}</button>)}</div>
                 <div className="search-row"><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nº do pedido ou cliente..." /></div>
                 <TabelaPedidos lista={pedidosFiltrados} onEdit={(p) => setModal({ tipo: 'pedido', dados: p })}
-                  onDelete={async (p) => { if (confirm('Deletar pedido?')) { try { await api.deletePedido(p.id_pedido || p.id); toast('Pedido deletado.', 'success'); carregar('pedidos'); } catch (e) { toast(e.message, 'error'); } } }} />
+                  onDelete={(p) => setModal({
+                    tipo: 'confirmar',
+                    dados: {
+                      titulo: 'Excluir pedido?',
+                      mensagem: 'O pedido e seus itens somem do painel. Essa ação não pode ser desfeita.',
+                      detalhe: `${p.id_pedido || `#${p.id}`} • ${api.formatarMoeda(p.valor_total)} • ${p.status}`,
+                      confirmarTexto: 'Excluir pedido',
+                      onConfirm: async () => {
+                        try {
+                          await api.deletePedido(p.id_pedido || p.id);
+                          toast('Pedido deletado.', 'success');
+                          setModal(null);
+                          carregar('pedidos');
+                        } catch (e) { toast(e.message, 'error'); }
+                      },
+                    },
+                  })} />
               </div>
             )}
 
@@ -300,6 +333,7 @@ export default function Admin() {
 
       {modal?.tipo === 'pedido' && <PedidoModal pedido={modal.dados} onClose={() => setModal(null)} onSave={salvarPedido} />}
       {modal?.tipo === 'produto' && <ProdutoModal produto={modal.dados} onClose={() => setModal(null)} onSave={salvarProduto} />}
+      {modal?.tipo === 'confirmar' && <ConfirmModal {...modal.dados} onClose={() => setModal(null)} />}
     </div>
   );
 }
@@ -366,7 +400,7 @@ function PedidoModal({ pedido, onClose, onSave }) {
 
   return (
     <div className="modal-overlay show" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'left' }}>
+      <div className="modal modal-admin" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'left' }}>
         <div className="drawer-head"><h2>Pedido {pedido.id_pedido || `#${pedido.id}`}</h2><button className="icon-btn" onClick={onClose}>✕</button></div>
         <div className="drawer-body">
           <p style={{ fontSize: '.86rem', color: 'var(--cinza-500)' }}>Cliente #{pedido.cliente_id} • {api.formatarMoeda(pedido.valor_total)} • {pedido.entrega_tipo}</p>
@@ -443,7 +477,7 @@ function ProdutoModal({ produto, onClose, onSave }) {
 
   return (
     <div className="modal-overlay show" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'left' }}>
+      <div className="modal modal-admin" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'left' }}>
         <div className="drawer-head"><h2>{produto ? 'Editar Produto' : 'Novo Produto'}</h2><button className="icon-btn" onClick={onClose}>✕</button></div>
         <div className="drawer-body">
           <div className="form-group"><label className="form-label">Nome *</label><input value={nome} onChange={(e) => setNome(e.target.value)} /></div>

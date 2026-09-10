@@ -311,6 +311,31 @@ select {
 .modal-title { font-family: var(--font-serif); font-size: 1.45rem; margin-bottom: 8px; }
 .modal-text { color: var(--cinza-500); font-size: .92rem; margin-bottom: 22px; line-height: 1.6; }
 
+/* ---------- modal de confirmação (admin) ---------- */
+.modal-confirm { max-width: 400px; }
+.modal-confirm .modal-body { padding: 30px 26px 26px; }
+.confirm-icon {
+  width: 64px; height: 64px; border-radius: 50%; background: var(--erro-bg);
+  display: grid; place-items: center; font-size: 1.7rem; margin: 0 auto 14px;
+  border: 1.5px solid rgba(196, 30, 58, .18);
+}
+.confirm-item {
+  background: var(--cinza-100); border-radius: var(--r-sm);
+  padding: 10px 12px; font-size: .85rem; font-weight: 600;
+  margin: -8px 0 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.confirm-actions { display: flex; gap: 10px; }
+.confirm-actions .btn { flex: 1; padding: 12px 10px; }
+.confirm-actions .btn-danger:hover:not(:disabled) { filter: brightness(.92); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.confirm-actions .btn-danger:disabled { cursor: wait; }
+
+/* ---------- modais do admin (pedido/produto) ---------- */
+.modal-admin { max-width: 480px; border-top: 5px solid var(--dourado); }
+.modal-admin .drawer-head { padding: 16px 20px; }
+.modal-admin .drawer-head h2 { font-size: 1.35rem; }
+.modal-admin .drawer-foot { display: flex; gap: 10px; position: sticky; bottom: 0; border-radius: 0 0 var(--r-lg) var(--r-lg); }
+.modal-admin .drawer-foot .btn { padding: 12px 10px; }
+
 /* ---------- forms ---------- */
 .form-group { margin-bottom: 16px; }
 .form-label { display: block; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--cinza-600); margin-bottom: 6px; }
