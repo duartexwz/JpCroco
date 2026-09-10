@@ -144,14 +144,14 @@ select {
 /* ---------- hero / sections ---------- */
 .hero {
   position: relative; overflow: hidden; color: #fff;
-  background: radial-gradient(1100px 500px at 85% -10%, #2d6b4a 0%, transparent 60%),
+  background:
+    linear-gradient(100deg, rgba(9,20,13,.82) 0%, rgba(9,20,13,.5) 45%, rgba(9,20,13,.18) 100%),
+    url('/marca-jpcroco.jpg') center 28%/cover no-repeat,
+    radial-gradient(1100px 500px at 85% -10%, #2d6b4a 0%, transparent 60%),
     radial-gradient(800px 400px at 0% 110%, rgba(198,161,90,.25) 0%, transparent 55%),
     linear-gradient(135deg, #0c2b18 0%, #1a472a 60%, #0e3a20 100%);
 }
-.hero::after {
-  content: '🐊'; position: absolute; right: -30px; bottom: -70px; font-size: 22rem;
-  opacity: .07; transform: rotate(-12deg); pointer-events: none;
-}
+.hero::after { display: none; }
 .hero-inner { position: relative; z-index: 1; padding: 84px 20px 72px; max-width: 1180px; margin: 0 auto; }
 .eyebrow {
   display: inline-flex; align-items: center; gap: 8px;
@@ -172,7 +172,7 @@ select {
 .section-head.center { text-align: center; }
 .section-title { font-family: var(--font-serif); font-size: clamp(1.6rem, 3vw, 2.3rem); font-weight: 800; }
 .section-sub { color: var(--cinza-500); margin-top: 6px; }
-.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
 .feature {
   background: #fff; border: 1px solid var(--cinza-200); border-radius: var(--r-md);
   padding: 24px; box-shadow: var(--shadow-sm); transition: transform .2s, box-shadow .2s;

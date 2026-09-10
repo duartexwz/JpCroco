@@ -20,7 +20,6 @@ export default function Footer() {
           <div>
             <h4>Ajuda</h4>
             <Link to="/politica-privacidade">Política de Privacidade</Link>
-            <Link to="/loja">Trocas em até 30 dias</Link>
             <a href="https://www2.correios.com.br/sistemas/rastreamento/" target="_blank" rel="noreferrer">Rastrear nos Correios</a>
           </div>
           <div>

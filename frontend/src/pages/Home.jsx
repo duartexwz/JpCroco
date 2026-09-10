@@ -53,7 +53,6 @@ export default function Home({ onOpenCart }) {
             <a href="#destaques" className="btn btn-outline" style={{ borderColor: 'rgba(255,255,255,.4)', color: '#fff' }}>Ver Destaques</a>
           </div>
           <div className="hero-stats">
-            <div><b>🔄 Troca fácil</b><span>em até 30 dias</span></div>
             <div><b>🚚 Brasil todo</b><span>via Correios</span></div>
             <div><b>🔒 100% seguro</b><span>Mercado Pago</span></div>
           </div>
@@ -72,11 +71,6 @@ export default function Home({ onOpenCart }) {
               <div className="feature-icon">💎</div>
               <h3>Qualidade Premium</h3>
               <p>Materiais selecionados e acabamento impecável em cada peça.</p>
-            </div>
-            <div className="feature">
-              <div className="feature-icon">🔄</div>
-              <h3>Troca Fácil</h3>
-              <p>Troca gratuita em até 30 dias. Sua satisfação é nossa prioridade.</p>
             </div>
           </div>
         </div>
