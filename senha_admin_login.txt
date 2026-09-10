@@ -1,0 +1,4 @@
+admin_loja
+
+
+$argon2id$v=19$m=65536,t=3,p=4$5m5TTbABWq/vJrEgoUD53Q$eljGJ951UktV4QVjR5SlbImkBmkcn+fUl/IVTuOfzS0

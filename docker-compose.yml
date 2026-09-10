@@ -1,0 +1,81 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "8070:8070"
+    networks:
+      - loja-online-network
+    depends_on:
+      - backend
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: ${ALGORITHM}
+      CLIENT_ID: ${CLIENT_ID}
+      CLIENT_SECRET: ${CLIENT_SECRET}
+      MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN}
+      MERCADOPAGO_PUBLIC_KEY: ${MERCADOPAGO_PUBLIC_KEY}
+      MERCADOPAGO_WEBHOOK_SECRET: ${MERCADOPAGO_WEBHOOK_SECRET}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_SUBJECT: ${VAPID_SUBJECT}
+      FRONTEND_URL: ${FRONTEND_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      CORREIOS_USER: ${CORREIOS_USER}
+      CORREIOS_SENHA: ${CORREIOS_SENHA}
+      CORREIOS_CEP_ORIGEM: ${CORREIOS_CEP_ORIGEM}
+      CORREIOS_TOKEN_URL: ${CORREIOS_TOKEN_URL}
+      CORREIOS_PRECO_URL: ${CORREIOS_PRECO_URL}
+      CORREIOS_PRAZO_URL: ${CORREIOS_PRAZO_URL}
+      CORREIOS_CO_PRODUTO_PAC: ${CORREIOS_CO_PRODUTO_PAC}
+      CORREIOS_CO_PRODUTO_SEDEX: ${CORREIOS_CO_PRODUTO_SEDEX}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL}
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN}
+      VENDEDOR_WHATSAPP: ${VENDEDOR_WHATSAPP}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
+    networks:
+      - loja-online-network
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8055"
+    ports:
+      - "8055:8055"
+  db:
+    image: postgres:16-alpine
+    container_name: loja_online_db
+    env_file:
+      - db.env
+    networks:
+      - loja-online-network
+    ports:
+      - "5433:5432"
+    restart: always
+    command: ["postgres", "-c", "max_connections=200"]
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loja_admin -d loja_online_db"]
+      interval: 10s
+
+networks:
+  loja-online-network:
+    driver: bridge
+volumes:
+  db_data:
+  uploads:
