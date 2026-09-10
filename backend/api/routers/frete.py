@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 
@@ -114,6 +114,29 @@ async def calcular(req: CalcularFreteRequest):
 
         # Se sem credenciais, retorna mock para teste
         from api.settings import settings
+        # 1) Melhor Envio (produção, sem contrato próprio)
+        if settings.MELHORENVIO_TOKEN:
+            from api.services.melhorenvio import calcular as calcular_me
+            try:
+                opcoes = await calcular_me(
+                    req.cepDestino, ps, comp, larg, alt,
+                    valor_declarado=float(req.vlDeclarado or 0),
+                )
+            except Exception as e:
+                # Cai para o Correios/mock abaixo em vez de quebrar o checkout
+                import logging as _lgme
+                _lgme.getLogger('frete').warning('Melhor Envio falhou, tentando Correios: %s', str(e)[:200])
+            else:
+                return {
+                    'cepDestino': req.cepDestino,
+                    'pesoReal': ps,
+                    'pesoCubadoKg': round((comp * larg * alt) / 6000, 2),
+                    'pesoTaxavel': taxavel,
+                    'dimensoes': {'comp': comp, 'larg': larg, 'alt': alt},
+                    'opcoes': opcoes,
+                    'mock': False,
+                    'provedor': 'melhorenvio',
+                }
         if not settings.CORREIOS_USER:
             # mock: R$ 18 + 0.02 por grama taxavel + prazo 5 dias
             mock_valor = round(18 + (taxavel/1000)*4,2)
@@ -165,3 +188,27 @@ async def calcular(req: CalcularFreteRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get('/melhorenvio-webhook')
+async def melhorenvio_webhook_check():
+    """Responde à verificação de cadastro do painel ME (teste via GET)."""
+    return {'ok': True}
+
+
+@router.post('/melhorenvio-webhook')
+async def melhorenvio_webhook(request: Request):
+    """Recebe eventos do Melhor Envio (tracking da etiqueta etc.).
+
+    URL pública p/ cadastrar no painel ME:
+    https://jpcroco.vercel.app/api/frete/melhorenvio-webhook
+    Por enquanto registra o evento; o vínculo com o pedido entra na
+    fase 2 (compra de etiqueta).
+    """
+    import logging
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    logging.getLogger('frete').info('Webhook ME: %s', str(payload)[:500])
+    return {'ok': True}
