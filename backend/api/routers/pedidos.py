@@ -27,6 +27,23 @@ CurrentAdmin = Annotated[dict, Depends(get_current_admin)]
 router = APIRouter(prefix='/pedidos', tags=['pedidos'])
 
 
+_FRETE_COLS = {'tem': None}
+
+
+async def _tem_frete(db: asyncpg.Connection) -> bool:
+    """Detecta uma única vez se o banco tem as colunas de frete.
+
+    Evita 1 roundtrip de sonda a cada requisição (eram 4 sondas por chamada).
+    """
+    if _FRETE_COLS['tem'] is None:
+        try:
+            await db.fetchval('SELECT valor_frete FROM pedidos LIMIT 1')
+            _FRETE_COLS['tem'] = True
+        except Exception:
+            _FRETE_COLS['tem'] = False
+    return _FRETE_COLS['tem']
+
+
 @router.post('/', status_code=HTTPStatus.CREATED, response_model=PedidosResponseSchema)
 async def create_pedido(pedido: PedidosSchema, db: database_loja, current_user: CurrentUser, background: BackgroundTasks):
 
@@ -77,11 +94,8 @@ async def create_pedido(pedido: PedidosSchema, db: database_loja, current_user: 
 @router.get('/', response_model=PedidosList)
 async def get_pedidos(db: database_loja, filtrar: FilterPedidos = Depends(), cliente_id: int | None = None):
     base_cols = 'id, cliente_id, status, endereco_entrega, id_pedido, valor_total, codigo_rastreio, data_envio, transportadora, entrega_tipo'
-    try:
-        await db.fetchval('SELECT valor_frete FROM pedidos LIMIT 1')
+    if await _tem_frete(db):
         base_cols += ', valor_frete, subtotal, cep_destino'
-    except Exception:
-        pass
     query = f'SELECT {base_cols} FROM pedidos WHERE 1=1'
 
     params = []
@@ -129,11 +143,7 @@ async def get_pedidos(db: database_loja, filtrar: FilterPedidos = Depends(), cli
 @router.get('/meus', response_model=PedidosList)
 async def get_meus_pedidos(db: database_loja, current_user: CurrentUser):
     """Lista somente os pedidos associados ao e-mail do usuário autenticado."""
-    try:
-        await db.fetchval('SELECT valor_frete FROM pedidos LIMIT 1')
-        extra = ', p.valor_frete, p.subtotal, p.cep_destino'
-    except Exception:
-        extra = ''
+    extra = ', p.valor_frete, p.subtotal, p.cep_destino' if await _tem_frete(db) else ''
     query = f"""
         SELECT p.id, p.cliente_id, p.status, p.endereco_entrega, p.id_pedido,
                p.valor_total, p.codigo_rastreio, p.data_envio,
@@ -187,9 +197,7 @@ async def update_pedido(
             raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Só é possível marcar como Entregue após o envio.')
 
     # Remove campos de frete se o banco ainda não tem as colunas
-    try:
-        await db.fetchval('SELECT valor_frete FROM pedidos LIMIT 1')
-    except Exception:
+    if not await _tem_frete(db):
         for campo in ('valor_frete', 'subtotal', 'cep_destino'):
             update_data.pop(campo, None)
 
@@ -216,10 +224,9 @@ async def update_pedido(
     params.append(id_pedido)
 
     set_query = ','.join(set_clauses)
-    try:
+    if await _tem_frete(db):
         cols = 'id, cliente_id, status, endereco_entrega, id_pedido, valor_total, codigo_rastreio, data_envio, transportadora, entrega_tipo, valor_frete, subtotal, cep_destino'
-        await db.fetchval('SELECT valor_frete FROM pedidos LIMIT 1')
-    except Exception:
+    else:
         cols = 'id, cliente_id, status, endereco_entrega, id_pedido, valor_total, codigo_rastreio, data_envio, transportadora, entrega_tipo'
     query = f"""
         UPDATE pedidos

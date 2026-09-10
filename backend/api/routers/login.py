@@ -1,11 +1,13 @@
-from http import HTTPStatus
-from typing import Annotated
 import logging
+from http import HTTPStatus
+from time import time
+from typing import Annotated
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
+from fastapi_mail import ConnectionConfig, FastMail, MessageSchema
+from jwt import InvalidTokenError, decode
 from pydantic import BaseModel
 
 from api.database import get_db
@@ -79,10 +81,46 @@ async def login(db: database_loja, form_data: oauth2_scheme):
 
 @router.post('/refresh_login', response_model=Token)
 async def refreash_access_token(current_user: CurrentUser):
+    sub = current_user.get('username') or current_user.get('sub')
+    acesso = current_user.get('acesso', 'comum')
+    new_access_token = await create_access_token(data={'sub': sub, 'acesso': acesso})
 
-    identifier = getattr(current_user, 'username', None) or getattr(current_user, 'nome', None)
-    new_access_token = await create_access_token(data={'sub': identifier})
+    return {'access_token': new_access_token, 'token_type': 'bearer'}
 
+
+# Janela em que um token expirado ainda pode ser renovado sem relogar.
+REFRESH_GRACE_SECONDS = 7 * 24 * 3600
+
+
+class RefreshRequest(BaseModel):
+    token: str
+
+
+@router.post('/refresh', response_model=Token)
+async def refresh_access_token(body: RefreshRequest):
+    """Renova um token expirado há pouco (até 7 dias) sem pedir senha.
+
+    Valida a assinatura; só a expiração é tolerada dentro da janela.
+    """
+    try:
+        payload = decode(
+            body.token, settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM], options={'verify_exp': False},
+        )
+    except InvalidTokenError:
+        raise HTTPException(status_code=HTTPStatus.UNAUTHORIZED, detail='Sessão expirada. Faça login novamente.')
+    sub = payload.get('sub')
+    exp = payload.get('exp')
+    try:
+        exp_ts = float(exp)
+    except (TypeError, ValueError):
+        exp_ts = 0
+    if not sub or not exp_ts or time() - exp_ts > REFRESH_GRACE_SECONDS:
+        raise HTTPException(status_code=HTTPStatus.UNAUTHORIZED, detail='Sessão expirada. Faça login novamente.')
+
+    new_access_token = await create_access_token(
+        data={'sub': sub, 'acesso': payload.get('acesso', 'comum')},
+    )
     return {'access_token': new_access_token, 'token_type': 'bearer'}
 
 

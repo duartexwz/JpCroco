@@ -147,7 +147,7 @@ export function useAdminNotify() {
       try {
         if (regRef.current && Notification.permission === 'granted') {
           await regRef.current.showNotification(titulo, {
-            body: corpo, tag: 'jpcroco-pedido', renotify: true, vibrate: [200, 100, 200], data: { url: '/admin' },
+            body: corpo, tag: 'jpcroco-pedido', renotify: true, vibrate: [200, 100, 200], data: { url: '/#/admin' },
           });
           sistemaOk = true;
         }

@@ -35,8 +35,51 @@ export default function PaymentModal({ order, onClose, onSuccess }) {
   const [estado, setEstado] = useState('loading'); // loading | form | pix | erro
   const [mensagem, setMensagem] = useState('Carregando pagamento...');
   const [pix, setPix] = useState(null);
+  const [verificando, setVerificando] = useState(false);
   const brickCtrl = useRef(null);
   const initializing = useRef(false);
+
+  // Polling do Pix: confere no Mercado Pago a cada 5s (até 10 min).
+  // Funciona mesmo se o webhook falhar — a confirmação vem da consulta.
+  const checarPagamento = async (paymentId) => {
+    if (!paymentId || verificando) return false;
+    setVerificando(true);
+    try {
+      const st = await api.getPaymentStatus(paymentId);
+      const pay = String(st.payment_status || '').toLowerCase();
+      const ped = String(st.pedido_status || '').toLowerCase();
+      if (pay === 'approved' || ped === 'pago') {
+        onSuccess(order);
+        return true;
+      }
+      if (['rejected', 'cancelled', 'expired'].includes(pay)) {
+        setEstado('erro');
+        setMensagem(pay === 'expired' ? 'Pix expirado. Gere um novo pagamento.' : 'Pagamento não aprovado. Tente novamente.');
+        return true;
+      }
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setVerificando(false);
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    const pixId = pix?.id || pix?.payment_id;
+    if (estado !== 'pix' || !pixId) return;
+    let tentativas = 0;
+    const id = setInterval(async () => {
+      tentativas += 1;
+      if (tentativas > 120) {
+        clearInterval(id);
+        return;
+      }
+      if (await checarPagamento(pixId)) clearInterval(id);
+    }, 5000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estado, pix?.id, pix?.payment_id]);
 
   useEffect(() => {
     if (!order) return;
@@ -155,6 +198,9 @@ export default function PaymentModal({ order, onClose, onSuccess }) {
                 </>
               )}
               <p className="form-hint" style={{ marginTop: 10 }}>Após pagar, o pedido é confirmado automaticamente. Acompanhe em Minhas Compras.</p>
+              <button className="btn btn-primary btn-sm" style={{ marginTop: 8 }} disabled={verificando} onClick={() => checarPagamento(pix.id || pix.payment_id)}>
+                {verificando ? 'Verificando…' : 'Já paguei — verificar agora'}
+              </button>
             </div>
           )}
         </div>

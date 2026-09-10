@@ -12,6 +12,7 @@ export default function SafeImg({ src, alt = '', className, style, ...rest }) {
       className={className}
       style={style}
       loading="lazy"
+      decoding="async"
       onError={() => setQuebrou(true)}
       {...rest}
     />

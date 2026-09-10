@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { HashRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -10,13 +10,14 @@ import { AuthProvider, useAuth } from './store/AuthContext';
 import { CartProvider } from './store/CartContext';
 import { ToastProvider, useToast } from './store/ToastContext';
 import Home from './pages/Home';
-import Loja from './pages/Loja';
-import Login from './pages/Login';
-import Conta from './pages/Conta';
-import MinhasCompras from './pages/MinhasCompras';
-import Admin from './pages/Admin';
-import RedefinirSenha from './pages/RedefinirSenha';
-import Politica from './pages/Politica';
+// Rotas fora da home carregam sob demanda (code-split: primeiro paint menor).
+const Loja = lazy(() => import('./pages/Loja'));
+const Login = lazy(() => import('./pages/Login'));
+const Conta = lazy(() => import('./pages/Conta'));
+const MinhasCompras = lazy(() => import('./pages/MinhasCompras'));
+const Admin = lazy(() => import('./pages/Admin'));
+const RedefinirSenha = lazy(() => import('./pages/RedefinirSenha'));
+const Politica = lazy(() => import('./pages/Politica'));
 
 function RequerAuth({ children }) {
   const { user, ready } = useAuth();
@@ -68,6 +69,7 @@ function Shell() {
   return (
     <>
       <Header onOpenCart={() => setCartOpen(true)} />
+      <Suspense fallback={<div className="spinner" style={{ margin: '60px auto' }} />}>
       <Routes>
         <Route path="/" element={<Home onOpenCart={() => setCartOpen(true)} />} />
         <Route path="/loja" element={<Loja onOpenCart={() => setCartOpen(true)} />} />
@@ -79,6 +81,7 @@ function Shell() {
         <Route path="/admin" element={<RequerAdmin><Admin /></RequerAdmin>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
       <Footer />
 
       <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} onCheckout={iniciarCheckout} />

@@ -170,11 +170,34 @@ async def listar_produtos(filtrar: Annotated[FilterProdutos, Depends()], db: dat
 
     result = await db.fetch(query, *params)
 
+    # Batch: 3 queries no total em vez de 2N+1 (tamanhos+imagens por produto).
+    ids = [row['id'] for row in result]
+    tams_by: dict[int, list] = {}
+    imgs_by: dict[int, list] = {}
+    if ids:
+        for t in await db.fetch(
+            'SELECT produto_id, tamanho, stock, preco, cor FROM produto_tamanhos WHERE produto_id = ANY($1::bigint[]) ORDER BY id',
+            ids,
+        ):
+            tams_by.setdefault(t['produto_id'], []).append({'tamanho': t['tamanho'], 'stock': t['stock'], 'preco': t['preco'], 'cor': t['cor']})
+        for im in await db.fetch(
+            'SELECT produto_id, url FROM produto_imagens WHERE produto_id = ANY($1::bigint[]) ORDER BY ordem, id',
+            ids,
+        ):
+            imgs_by.setdefault(im['produto_id'], []).append(im['url'])
+        sem_img = [i for i in ids if i not in imgs_by]
+        if sem_img:
+            for cover in await db.fetch(
+                'SELECT id, imagem FROM produtos WHERE id = ANY($1::bigint[]) AND imagem IS NOT NULL',
+                sem_img,
+            ):
+                imgs_by.setdefault(cover['id'], []).append(cover['imagem'])
+
     produtos = []
     for row in result:
         dados = dict(row)
-        dados['tamanhos'] = await _get_tamanhos(db, row['id'])
-        dados['imagens'] = await _get_imagens(db, row['id'])
+        dados['tamanhos'] = tams_by.get(row['id'], [])
+        dados['imagens'] = imgs_by.get(row['id'], [])
         produtos.append(dados)
 
     return {'produtos': produtos}

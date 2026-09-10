@@ -88,9 +88,15 @@ async def process_brick_payment(request: Request, db: dbConnection, current_user
         _lg2.getLogger('pagamento').warning('MP recusou pagamento pedido %s: %s/%s', pedido_id, r.get('status'), r.get('status_detail'))
     point = r.get('point_of_interaction',{}).get('transaction_data',{})
     if r.get('status')=='approved':
-        await db.execute("UPDATE pedidos SET status='Pago' WHERE id=$1", int(pedido_id))
-        try: await _dar_baixa_estoque(db, int(pedido_id))
-        except: pass
+        pedido_pago = await _confirmar_pagamento(db, int(pedido_id))
+        if pedido_pago:
+            try:
+                import asyncio
+                from api.routers.push import tarefa_push_admins
+                idp = pedido_pago.get('id_pedido') or f'#{pedido_id}'
+                asyncio.create_task(tarefa_push_admins('✅ Pagamento aprovado!', f'Pedido {idp} pago e confirmado.'))
+            except Exception:
+                pass
     return {'id': r.get('id'), 'status': r.get('status'), 'status_detail': r.get('status_detail'), 'qr_code_base64': point.get('qr_code_base64'), 'qr_code': point.get('qr_code'), 'ticket_url': point.get('ticket_url')}
 
 
@@ -128,10 +134,12 @@ async def criar_pix(pedido_id: int, db: dbConnection, current_user: CurrentUser)
         'description': f'Pedido #{pedido["id"]}',
         'payment_method_id': 'pix',
         'external_reference': str(pedido['id']),
+        'notification_url': settings.WEBHOOK_URL or None,
         'payer': {
             'email': 'comprador@email.com',
         },
     }
+    payment_data = {k: v for k, v in payment_data.items() if v is not None}
 
     try:
         payment_response = sdk.payment().create(payment_data)
@@ -158,6 +166,45 @@ async def criar_pix(pedido_id: int, db: dbConnection, current_user: CurrentUser)
         'qr_code': qr_code,
         'valor': float(pedido['valor_total']),
     }
+
+
+@payments_router.get('/status/{payment_id}')
+async def consultar_status_pagamento(payment_id: int, db: dbConnection, current_user: CurrentUser):
+    """Consulta o status oficial no Mercado Pago (polling do frontend).
+
+    Se aprovado e o pedido ainda estiver pendente, confirma na hora
+    (mesmo efeito do webhook) e retorna o status atualizado.
+    """
+    try:
+        payment_info = sdk.payment().get(payment_id)
+    except Exception as e:
+        raise HTTPException(status_code=HTTPStatus.BAD_GATEWAY, detail=f'Falha ao consultar Mercado Pago: {str(e)[:150]}')
+    payment_data = payment_info.get('response', {}) or {}
+    payment_status = str(payment_data.get('status') or '').lower()
+    try:
+        pedido_id = int(payment_data.get('external_reference')) if payment_data.get('external_reference') else None
+    except (ValueError, TypeError):
+        pedido_id = None
+
+    pedido_status = None
+    if pedido_id:
+        if payment_status == 'approved':
+            confirmado = await _confirmar_pagamento(db, pedido_id)
+            if confirmado:
+                try:
+                    import asyncio
+                    from api.routers.push import tarefa_push_admins
+                    idp = confirmado.get('id_pedido') or f'#{pedido_id}'
+                    asyncio.create_task(tarefa_push_admins('✅ Pagamento aprovado!', f'Pedido {idp} pago e confirmado.'))
+                except Exception:
+                    pass
+                pedido_status = 'Pago'
+            else:
+                pedido_status = await db.fetchval('SELECT status FROM pedidos WHERE id = $1', pedido_id)
+        else:
+            pedido_status = await db.fetchval('SELECT status FROM pedidos WHERE id = $1', pedido_id)
+
+    return {'payment_id': payment_id, 'payment_status': payment_status, 'pedido_id': pedido_id, 'pedido_status': pedido_status}
 
 
 @router.post('/brick-payment')
@@ -282,6 +329,26 @@ async def _dar_baixa_estoque(db: asyncpg.Connection, pedido_id: int) -> None:
                 item['tamanho'],
             )
 
+async def _confirmar_pagamento(db: asyncpg.Connection, pedido_id: int) -> dict | None:
+    """Marca o pedido como Pago (idempotente), dá baixa no estoque e
+    retorna a linha atualizada — ou None se já estava Pago/inexistente.
+    Usado pelo webhook, pelo polling de status e pela aprovação imediata."""
+    query = """
+        UPDATE pedidos
+        SET status = $1
+        WHERE id = $2 AND status != 'Pago'
+        RETURNING id, cliente_id, status, endereco_entrega, id_pedido
+    """
+    pedido = await db.fetchrow(query, 'Pago', pedido_id)
+    if not pedido:
+        return None
+    try:
+        await _dar_baixa_estoque(db, pedido_id)
+    except Exception:
+        pass
+    return dict(pedido)
+
+
 def _alertar_credencial_mp(http_status) -> None:
     """Se o MP rejeitar com 401/403/404, as credenciais morreram/rodaram:
     avisa o admin por push na hora (não espera o Brick quebrar em silêncio)."""
@@ -382,32 +449,22 @@ async def mercadopago_webhook(request: Request, db: dbConnection, background: Ba
 
         # Se o pagamento for aprovado, atualiza o status do pedido no banco
         if payment_status == 'approved':
-            async with db.transaction():
-                query = """
-                    UPDATE pedidos
-                    SET status = $1
-                    WHERE id = $2 AND status != 'Pago'
-                    RETURNING id, cliente_id, status, endereco_entrega, id_pedido
-                """
+            pedido_atualizado = await _confirmar_pagamento(db, pedido_id)
 
-                pedido_atualizado = await db.fetchrow(query, 'Pago', pedido_id)
+            if not pedido_atualizado:
+                # Ou o pedido não existe, ou já estava 'Pago' (webhook duplicado/concorrente).
+                pedido_existe = await db.fetchval('SELECT 1 FROM pedidos WHERE id = $1', pedido_id)
+                if not pedido_existe:
+                    raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail='Pedido não encontrado')
+                return Response(status_code=HTTPStatus.OK)
 
-                if not pedido_atualizado:
-                    # Ou o pedido não existe, ou já estava 'Pago' (webhook duplicado/concorrente).
-                    pedido_existe = await db.fetchval('SELECT 1 FROM pedidos WHERE id = $1', pedido_id)
-                    if not pedido_existe:
-                        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail='Pedido não encontrado')
-                    return Response(status_code=HTTPStatus.OK)
-
-                # Dar baixa no estoque de cada item comprado (produto + tamanho)
-                await _dar_baixa_estoque(db, pedido_id)
-                # Push no aparelho do admin (pagamento aprovado via webhook)
-                try:
-                    from api.routers.push import agendar_push
-                    idp = pedido_atualizado.get('id_pedido') or f'#{pedido_id}'
-                    agendar_push(background, '✅ Pagamento aprovado!', f'Pedido {idp} pago e confirmado.')
-                except Exception:
-                    pass
+            # Push no aparelho do admin (pagamento aprovado via webhook)
+            try:
+                from api.routers.push import agendar_push
+                idp = pedido_atualizado.get('id_pedido') or f'#{pedido_id}'
+                agendar_push(background, '✅ Pagamento aprovado!', f'Pedido {idp} pago e confirmado.')
+            except Exception:
+                pass
 
         # Caso nao seja, atualizar para pedido recusado
         elif payment_status == 'rejected':

@@ -87,6 +87,33 @@ export default function Admin() {
 
   useEffect(() => { if (user?.acesso === 'admin') carregar(tab); /* eslint-disable-next-line */ }, [tab]);
 
+  // Pop-up de boas-vindas do admin: mostra o pedido mais recente UMA vez
+  // por sessão, com som + notificação no aparelho — mesmo que ele tenha
+  // chegado com o site fechado (o push do backend acorda o aparelho).
+  useEffect(() => {
+    if (user?.acesso !== 'admin') return;
+    let vivo = true;
+    (async () => {
+      try {
+        const d = await api.getPedidos({ limit: 1 });
+        const ultimo = (d.pedidos || [])[0];
+        if (!ultimo || !vivo) return;
+        const chave = `popup_pedido_${ultimo.id}`;
+        let visto = false;
+        try { visto = !!sessionStorage.getItem(chave); } catch { /* ignore */ }
+        if (visto) return;
+        try { sessionStorage.setItem(chave, '1'); } catch { /* ignore */ }
+        setModal({ tipo: 'recente', dados: ultimo });
+        notify.notificarAparelho(
+          '🛒 Último pedido',
+          `${ultimo.id_pedido || `#${ultimo.id}`} • ${ultimo.status} • ${api.formatarMoeda(ultimo.valor_total)}`,
+        );
+      } catch { /* painel segue sem pop-up */ }
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.acesso]);
+
   // Auto-reload da aba atual a cada 60s (silencioso, sem spinner). Não
   // recarrega no meio de edição: modal aberta ou digitando em campo — nesse
   // caso apenas reinicia a contagem e tenta de novo no próximo ciclo.
@@ -336,6 +363,7 @@ export default function Admin() {
       {modal?.tipo === 'pedido' && <PedidoModal pedido={modal.dados} onClose={() => setModal(null)} onSave={salvarPedido} />}
       {modal?.tipo === 'produto' && <ProdutoModal produto={modal.dados} onClose={() => setModal(null)} onSave={salvarProduto} />}
       {modal?.tipo === 'confirmar' && <ConfirmModal {...modal.dados} onClose={() => setModal(null)} />}
+      {modal?.tipo === 'recente' && <PedidoRecenteModal pedido={modal.dados} onClose={() => setModal(null)} onVer={() => { setModal(null); setTab('pedidos'); }} />}
     </div>
   );
 }
@@ -367,6 +395,28 @@ function NotifyBar({ notify, trabalhando, onAlternar, autoReload, restante, onTo
           {trabalhando ? '...' : ligado ? 'Pausar aparelho' : 'Ativar aparelho'}
         </button>
       </span>
+    </div>
+  );
+}
+
+function PedidoRecenteModal({ pedido, onClose, onVer }) {
+  return (
+    <div className="modal-overlay show" onClick={onClose}>
+      <div className="modal modal-admin" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'left' }}>
+        <div className="drawer-head"><h2>🛒 Último pedido</h2><button className="icon-btn" onClick={onClose}>✕</button></div>
+        <div className="drawer-body">
+          <p style={{ fontSize: '1.05rem', marginBottom: 4 }}><b>{pedido.id_pedido || `#${pedido.id}`}</b> • {pedido.status}</p>
+          <p style={{ fontSize: '.86rem', color: 'var(--cinza-500)' }}>
+            Cliente #{pedido.cliente_id} • {api.formatarMoeda(pedido.valor_total)} • {pedido.entrega_tipo || '—'}
+          </p>
+          {pedido.codigo_rastreio && <p style={{ fontSize: '.85rem', marginTop: 6 }}>Rastreio: <code>{pedido.codigo_rastreio}</code></p>}
+          <p style={{ fontSize: '.85rem', marginTop: 8 }}>{pedido.endereco_entrega}</p>
+        </div>
+        <div className="drawer-foot" style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={onClose} style={{ flex: 1 }}>Depois</button>
+          <button className="btn btn-primary" onClick={onVer} style={{ flex: 2 }}>Gerenciar pedido</button>
+        </div>
+      </div>
     </div>
   );
 }

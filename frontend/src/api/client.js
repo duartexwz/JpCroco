@@ -29,25 +29,30 @@ async function request(path, options = {}) {
   // Normaliza: chama /api/payments/... como /payments/... (vite proxy já tem /api)
   const clean = path.startsWith('/api/') ? path.slice(4) : path;
   const url = `${API_BASE}${clean}`;
-  const headers = { ...(options.headers || {}) };
-  const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
-    headers['Content-Type'] = 'application/json';
-  }
-  let res;
-  try {
-    res = await fetch(url, { ...options, headers });
-  } catch {
-    throw new Error('Erro de conexão com o servidor.');
-  }
+  const doFetch = async (token) => {
+    const headers = { ...(options.headers || {}) };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+    try {
+      return await fetch(url, { ...options, headers });
+    } catch {
+      throw new Error('Erro de conexão com o servidor.');
+    }
+  };
+  let res = await doFetch(getToken());
+  // 401 em rota autenticada: tenta renovar o token em silêncio UMA vez e
+  // repete a requisição. Só desloga se a renovação falhar.
   if (res.status === 401 && !path.includes('/login')) {
-    sessionStorage.removeItem('access_token');
-    sessionStorage.removeItem('user');
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
-    window.location.href = '/#/login';
-    throw new Error('Sessão expirada. Faça login novamente.');
+    try {
+      await refreshToken();
+      res = await doFetch(getToken());
+    } catch {
+      logoutLocal();
+      window.location.href = '/#/login';
+      throw new Error('Sessão expirada. Faça login novamente.');
+    }
   }
   let data = null;
   try {
@@ -60,6 +65,35 @@ async function request(path, options = {}) {
     throw new Error(typeof msg === 'string' ? msg : 'Erro na requisição');
   }
   return data;
+}
+
+// Renovação compartilhada: requisições 401 simultâneas usam a mesma promise.
+let refreshing = null;
+async function refreshToken() {
+  if (!refreshing) {
+    refreshing = (async () => {
+      const old = getToken();
+      if (!old) throw new Error('sem token');
+      const res = await fetch(`${API_BASE}/login/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: old }),
+      });
+      if (!res.ok) throw new Error('refresh negado');
+      const data = await res.json();
+      if (!data?.access_token) throw new Error('refresh sem token');
+      sessionStorage.setItem('access_token', data.access_token);
+      return data.access_token;
+    })().finally(() => { refreshing = null; });
+  }
+  return refreshing;
+}
+
+function logoutLocal() {
+  sessionStorage.removeItem('access_token');
+  sessionStorage.removeItem('user');
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('user');
 }
 
 function buildQuery(params = {}) {
@@ -147,6 +181,7 @@ export const api = {
       headers: { 'X-Idempotency-Key': idempotencyKey },
       body: JSON.stringify({ pedido_id, formData }),
     }),
+  getPaymentStatus: (paymentId) => request(`/payments/status/${paymentId}`),
 
   // Admin
   getAdmins: (p = {}) => request(`/admins/${buildQuery(p)}`),
