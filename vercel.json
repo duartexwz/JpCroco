@@ -18,7 +18,11 @@
             }
         },
         {
-            "handle": "filesystem"
+            "source": "/(.*)\\.(js|css|png|jpg|jpeg|webp|svg|ico|json|txt|webmanifest|xml)",
+            "destination": {
+                "type": "service",
+                "service": "frontend"
+            }
         },
         {
             "source": "/((?!api).*)",
