@@ -18,18 +18,10 @@
             }
         },
         {
-            "source": "/(.*)\\.(js|css|png|jpg|jpeg|webp|svg|ico|json|txt|webmanifest|xml)",
+            "source": "/(.*)",
             "destination": {
                 "type": "service",
                 "service": "frontend"
-            }
-        },
-        {
-            "source": "/((?!api).*)",
-            "destination": {
-                "type": "service",
-                "service": "frontend",
-                "path": "index.html"
             }
         }
     ]

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { HashRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import CartDrawer from './components/CartDrawer';
@@ -45,7 +45,7 @@ function Shell() {
   const iniciarCheckout = () => {
     if (!isLogged) {
       toast('Faça login para comprar.', 'error');
-      window.location.href = '/login';
+      window.location.href = '/#/login';
       return;
     }
     setCartOpen(false);
@@ -97,7 +97,7 @@ function Shell() {
                 {success.entrega_tipo ? <><br />Entrega: {success.entrega_tipo}</> : null}
               </p>
               <div style={{ display: 'flex', gap: 8, flexDirection: 'column' }}>
-                <a href="/minhas-compras" className="btn btn-primary btn-block">Acompanhar em Minhas Compras</a>
+                <Link to="/minhas-compras" className="btn btn-primary btn-block">Acompanhar em Minhas Compras</Link>
                 <button className="btn btn-ghost btn-block" onClick={() => setSuccess(null)}>Continuar Comprando</button>
               </div>
             </div>
@@ -110,7 +110,7 @@ function Shell() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <AuthProvider>
         <CartProvider>
           <ToastProvider>
@@ -118,6 +118,6 @@ export default function App() {
           </ToastProvider>
         </CartProvider>
       </AuthProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

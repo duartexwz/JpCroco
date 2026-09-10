@@ -17,20 +17,20 @@ self.addEventListener('push', (event) => {
       tag: 'jpcroco-pedido',
       renotify: true,
       vibrate: [200, 100, 200],
-      data: { url: '/admin' },
+      data: { url: '/#/admin' },
     }),
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '/admin';
+  const url = (event.notification.data && event.notification.data.url) || '/#/admin';
   event.waitUntil(
     (async () => {
       const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
       for (const w of wins) {
         try {
-          if (new URL(w.url).pathname.startsWith(url) && 'focus' in w) return w.focus();
+          if (((new URL(w.url).hash) || '#/') === url && 'focus' in w) return w.focus();
         } catch (_) { /* ignora URLs inválidas */ }
       }
       if (clients.openWindow) return clients.openWindow(url);

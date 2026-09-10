@@ -46,7 +46,7 @@ async function request(path, options = {}) {
     sessionStorage.removeItem('user');
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
-    window.location.href = '/login';
+    window.location.href = '/#/login';
     throw new Error('Sessão expirada. Faça login novamente.');
   }
   let data = null;
