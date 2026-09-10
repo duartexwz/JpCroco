@@ -18,10 +18,14 @@
             }
         },
         {
-            "source": "/(.*)",
+            "handle": "filesystem"
+        },
+        {
+            "source": "/((?!api).*)",
             "destination": {
                 "type": "service",
-                "service": "frontend"
+                "service": "frontend",
+                "path": "index.html"
             }
         }
     ]

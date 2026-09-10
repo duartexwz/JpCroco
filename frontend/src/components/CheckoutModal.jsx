@@ -152,6 +152,7 @@ export default function CheckoutModal({ open, onClose, onPaid }) {
       for (const item of arr) {
         const payload = { pedido_id: pedido.id, produto_id: item.produto_id, quantidade: item.quantidade, preco_unitario: item.preco };
         if (item.tamanho) payload.tamanho = item.tamanho;
+        if (item.cor) payload.cor = item.cor;
         await api.createItemPedido(payload);
       }
       try {

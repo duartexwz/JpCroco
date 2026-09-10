@@ -9,6 +9,7 @@ class ItemSchema(BaseModel):
     quantidade: int
     preco_unitario: float
     tamanho: Optional[str] = None
+    cor: Optional[str] = None
 
 
 class ItemResponse(BaseModel):
@@ -18,6 +19,7 @@ class ItemResponse(BaseModel):
     quantidade: int
     preco_unitario: float
     tamanho: Optional[str] = None
+    cor: Optional[str] = None
 
 
 class ItemUpdate(BaseModel):
@@ -26,6 +28,7 @@ class ItemUpdate(BaseModel):
     quantidade: Optional[int] | None = None
     preco_unitario: Optional[float] | None = None
     tamanho: Optional[str] | None = None
+    cor: Optional[str] | None = None
 
 
 class ItemFilter(BaseModel):

@@ -7,6 +7,7 @@ class TamanhoSchema(BaseModel):
     tamanho: str
     stock: int = 0
     preco: Optional[float] = None
+    cor: Optional[str] = None
 
 
 class ProdutosSchema(BaseModel):

@@ -16,9 +16,9 @@ dbConnection = Annotated[asyncpg.Connection, Depends(get_db)]
 async def create_item_pedido(db: dbConnection, item_pedido: ItemSchema):
 
     insert = """
-    INSERT INTO itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, tamanho)
-    VALUES ($1, $2, $3, $4, $5)
-    RETURNING id, pedido_id, produto_id, quantidade, preco_unitario, tamanho
+    INSERT INTO itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, tamanho, cor)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING id, pedido_id, produto_id, quantidade, preco_unitario, tamanho, cor
     """
 
     try:
@@ -29,6 +29,7 @@ async def create_item_pedido(db: dbConnection, item_pedido: ItemSchema):
             item_pedido.quantidade,
             item_pedido.preco_unitario,
             item_pedido.tamanho,
+            item_pedido.cor,
         )
     except asyncpg.ForeignKeyViolationError:
         raise HTTPException(
@@ -44,7 +45,7 @@ async def create_item_pedido(db: dbConnection, item_pedido: ItemSchema):
 
 @router.get('/', response_model=ItemList, status_code=HTTPStatus.OK)
 async def get_item_pedido(db: dbConnection, filtrar: Annotated[ItemFilter, Depends()]):
-    query = 'SELECT id, pedido_id, produto_id, quantidade, preco_unitario, tamanho FROM itens_pedido WHERE 1=1'
+    query = 'SELECT id, pedido_id, produto_id, quantidade, preco_unitario, tamanho, cor FROM itens_pedido WHERE 1=1'
     params = []
     params_index = 1
 
@@ -93,7 +94,7 @@ async def atualizar_item_pedido(db: dbConnection, item_pedido_id: int, item_pedi
         UPDATE itens_pedido
         SET {set_query}
         WHERE id = ${params_index}
-        RETURNING id, pedido_id, produto_id, quantidade, preco_unitario, tamanho
+        RETURNING id, pedido_id, produto_id, quantidade, preco_unitario, tamanho, cor
     """
 
     result = await db.fetchrow(query, *params)

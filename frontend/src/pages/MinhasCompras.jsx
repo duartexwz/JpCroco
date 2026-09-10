@@ -100,7 +100,7 @@ export default function MinhasCompras() {
                           <div className="item-thumb">{prod?.imagem ? <SafeImg src={prod.imagem} alt="" /> : '🐊'}</div>
                           <div>
                             <div style={{ fontWeight: 700, fontSize: '.88rem' }}>{prod?.nome || 'Produto'}</div>
-                            <div style={{ fontSize: '.78rem', color: 'var(--cinza-500)' }}>{i.quantidade}x • {i.tamanho ? `Tam: ${i.tamanho} • ` : ''}{api.formatarMoeda(i.preco_unitario)}</div>
+                            <div style={{ fontSize: '.78rem', color: 'var(--cinza-500)' }}>{i.quantidade}x • {[i.cor, i.tamanho ? `Tam: ${i.tamanho}` : ''].filter(Boolean).join(' • ')}{i.cor || i.tamanho ? ' • ' : ''}{api.formatarMoeda(i.preco_unitario)}</div>
                           </div>
                         </div>
                       );

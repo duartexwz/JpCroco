@@ -8,6 +8,7 @@ export default function ProductModal({ produto, onClose }) {
   const { adicionar } = useCart();
   const { toast } = useToast();
   const [tamanho, setTamanho] = useState('');
+  const [corSel, setCorSel] = useState('');
   const [qtd, setQtd] = useState(1);
   const [imgIdx, setImgIdx] = useState(0);
 
@@ -15,14 +16,24 @@ export default function ProductModal({ produto, onClose }) {
   const imagens = produto.imagens?.length ? produto.imagens : (produto.imagem ? [produto.imagem] : []);
   const temPromo = produto.preco_promocional != null && Number(produto.preco_promocional) < Number(produto.preco);
   const semEstoque = (produto.stock ?? 0) <= 0;
-  const precisaTamanho = (produto.tamanhos?.length || 0) > 0;
+  // Cores vindas das variantes (tamanho+cor). Sem variante de cor: comportamento antigo.
+  const coresDisponiveis = [...new Set((produto.tamanhos || []).filter((t) => t.cor).map((t) => t.cor))];
+  const tamanhosVisiveis = coresDisponiveis.length
+    ? (produto.tamanhos || []).filter((t) => (t.cor || '') === corSel)
+    : (produto.tamanhos || []);
+  const precisaTamanho = tamanhosVisiveis.length > 0;
 
+  const escolherCor = (c) => { setCorSel(c); setTamanho(''); };
   const comprar = () => {
+    if (coresDisponiveis.length && !corSel) {
+      toast('Escolha uma cor.', 'error');
+      return;
+    }
     if (precisaTamanho && !tamanho) {
       toast('Escolha um tamanho.', 'error');
       return;
     }
-    for (let i = 0; i < qtd; i++) adicionar(produto, tamanho);
+    for (let i = 0; i < qtd; i++) adicionar(produto, tamanho, corSel);
     toast(`${produto.nome} na sacola!`, 'success');
     onClose(true);
   };
@@ -38,7 +49,7 @@ export default function ProductModal({ produto, onClose }) {
           <div className="product-img" style={{ borderRadius: 14, aspectRatio: '4/3' }}>
             {imagens[imgIdx] ? <SafeImg src={imagens[imgIdx]} alt={produto.nome} /> : <span>🐊</span>}
           </div>
-          {produto.cor && (
+          {produto.cor && !coresDisponiveis.length && (
             <p style={{ marginTop: 10, fontSize: '.88rem', color: 'var(--cinza-600)' }}>Cor: <b>{produto.cor}</b></p>
           )}
           {imagens.length > 1 && (
@@ -55,11 +66,23 @@ export default function ProductModal({ produto, onClose }) {
             </span>
             <span className="product-stock">{semEstoque ? 'Sem estoque' : `${produto.stock} em estoque`}</span>
           </div>
+          {coresDisponiveis.length > 0 && (
+            <div className="form-group" style={{ marginTop: 12 }}>
+              <label className="form-label">Cor *</label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {coresDisponiveis.map((c) => (
+                  <button key={c} className={`filter-btn${corSel === c ? ' active' : ''}`} onClick={() => escolherCor(c)}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {precisaTamanho && (
             <div className="form-group" style={{ marginTop: 12 }}>
-              <label className="form-label">Tamanho *</label>
+              <label className="form-label">Tamanho *{coresDisponiveis.length ? ` (${corSel || 'escolha a cor'})` : ''}</label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {produto.tamanhos.map((t) => (
+                {tamanhosVisiveis.map((t) => (
                   <button key={t.tamanho} className={`filter-btn${tamanho === t.tamanho ? ' active' : ''}`}
                     disabled={t.stock <= 0} onClick={() => setTamanho(t.tamanho)}>
                     {t.tamanho}{t.stock <= 0 ? ' (esg.)' : ''}

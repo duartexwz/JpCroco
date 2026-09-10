@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict LA03xFFlnmbVm8MJVws5dIItedxRuIkhmgcQIt1KpHcrMuaGIyoIqNmKgqTGXtS
+\restrict jG9nAhfXLGxLm4Auwk2fYYqyqdjwW67CuPMrvG0mcPMfBKDSH0RmNtTRe0thugF
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -150,6 +150,7 @@ CREATE TABLE public.itens_pedido (
     quantidade integer NOT NULL,
     preco_unitario numeric(10,2) NOT NULL,
     tamanho character varying(10),
+    cor character varying(30),
     CONSTRAINT itens_pedido_quantidade_check CHECK ((quantidade > 0))
 );
 
@@ -269,6 +270,7 @@ CREATE TABLE public.produto_tamanhos (
     stock integer DEFAULT 0 NOT NULL,
     preco numeric(10,2),
     criado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    cor character varying(30),
     CONSTRAINT produto_tamanhos_preco_check CHECK ((preco >= (0)::numeric)),
     CONSTRAINT produto_tamanhos_stock_check CHECK ((stock >= 0))
 );
@@ -535,11 +537,11 @@ ALTER TABLE ONLY public.produto_tamanhos
 
 
 --
--- Name: produto_tamanhos produto_tamanhos_produto_id_tamanho_key; Type: CONSTRAINT; Schema: public; Owner: loja_admin
+-- Name: produto_tamanhos produto_tamanhos_produto_id_tamanho_cor_key; Type: CONSTRAINT; Schema: public; Owner: loja_admin
 --
 
 ALTER TABLE ONLY public.produto_tamanhos
-    ADD CONSTRAINT produto_tamanhos_produto_id_tamanho_key UNIQUE (produto_id, tamanho);
+    ADD CONSTRAINT produto_tamanhos_produto_id_tamanho_cor_key UNIQUE (produto_id, tamanho, cor);
 
 
 --
@@ -640,5 +642,5 @@ ALTER TABLE ONLY public.produto_tamanhos
 -- PostgreSQL database dump complete
 --
 
-\unrestrict LA03xFFlnmbVm8MJVws5dIItedxRuIkhmgcQIt1KpHcrMuaGIyoIqNmKgqTGXtS
+\unrestrict jG9nAhfXLGxLm4Auwk2fYYqyqdjwW67CuPMrvG0mcPMfBKDSH0RmNtTRe0thugF
 

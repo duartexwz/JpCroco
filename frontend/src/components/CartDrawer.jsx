@@ -28,7 +28,7 @@ export default function CartDrawer({ open, onClose, onCheckout }) {
                 <div className="cart-thumb">{item.imagem ? <SafeImg src={item.imagem} alt={item.nome} /> : '🐊'}</div>
                 <div className="cart-info">
                   <div className="cart-name">{item.nome}</div>
-                  <div className="cart-meta">{item.tamanho ? `Tam: ${item.tamanho}` : ''}</div>
+                  <div className="cart-meta">{[item.cor, item.tamanho ? `Tam: ${item.tamanho}` : ''].filter(Boolean).join(' • ')}</div>
                   <div className="cart-bottom">
                     <div className="qty">
                       <button onClick={() => alterarQuantidade(item.chave, item.quantidade - 1)}>−</button>

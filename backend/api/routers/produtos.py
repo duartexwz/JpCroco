@@ -21,7 +21,7 @@ CurrentAdmin = Annotated[dict, Depends(get_current_admin)]
 
 async def _get_tamanhos(db: asyncpg.Connection, produto_id: int) -> list[dict]:
     rows = await db.fetch(
-        'SELECT tamanho, stock, preco FROM produto_tamanhos WHERE produto_id = $1 ORDER BY id',
+        'SELECT tamanho, stock, preco, cor FROM produto_tamanhos WHERE produto_id = $1 ORDER BY id',
         produto_id,
     )
     return [dict(r) for r in rows]
@@ -59,6 +59,20 @@ async def _serialize(db: asyncpg.Connection, produto: dict) -> dict:
     return dados
 
 
+def _validar_variantes(tamanhos: list) -> None:
+    """Impede tamanho repetido dentro da mesma cor (estouraria o UNIQUE)."""
+    vistos = set()
+    for t in tamanhos or []:
+        chave = ((t.cor or '').strip().lower(), (t.tamanho or '').strip().upper())
+        if chave in vistos:
+            rotulo = f'{t.tamanho}' + (f' ({t.cor})' if t.cor else '')
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,
+                detail=f'Tamanho repetido: {rotulo}.',
+            )
+        vistos.add(chave)
+
+
 @router.post('/', response_model=ProdutosResponse, status_code=HTTPStatus.CREATED)
 async def create_produto(produto: ProdutosSchema, db: database_loja, current_user: CurrentAdmin):
     check_query = 'SELECT id FROM produtos WHERE nome = $1'
@@ -71,6 +85,7 @@ async def create_produto(produto: ProdutosSchema, db: database_loja, current_use
         )
 
     tamanhos = produto.tamanhos or []
+    _validar_variantes(tamanhos)
     tamanho_base = tamanhos[0].tamanho if tamanhos else None
     stock_base = sum(t.stock for t in tamanhos) if tamanhos else 0
 
@@ -103,8 +118,8 @@ async def create_produto(produto: ProdutosSchema, db: database_loja, current_use
     for t in tamanhos:
         preco_var = t.preco if t.preco is not None else produto.preco
         await db.execute(
-            'INSERT INTO produto_tamanhos (produto_id, tamanho, stock, preco) VALUES ($1, $2, $3, $4)',
-            produto_id, t.tamanho, t.stock, preco_var,
+            'INSERT INTO produto_tamanhos (produto_id, tamanho, stock, preco, cor) VALUES ($1, $2, $3, $4, $5)',
+            produto_id, t.tamanho, t.stock, preco_var, t.cor,
         )
 
     if imagens:
@@ -228,13 +243,14 @@ async def atualizar_produto(produto_id: int, produto: ProdutosUpdate, db: databa
         )
 
     if produto.tamanhos is not None:
+        _validar_variantes(produto.tamanhos)
         await db.execute('DELETE FROM produto_tamanhos WHERE produto_id = $1', produto_id)
         preco_base = produto_db['preco']
         for t in produto.tamanhos:
             preco_var = t.preco if t.preco is not None else preco_base
             await db.execute(
-                'INSERT INTO produto_tamanhos (produto_id, tamanho, stock, preco) VALUES ($1, $2, $3, $4)',
-                produto_id, t.tamanho, t.stock, preco_var,
+                'INSERT INTO produto_tamanhos (produto_id, tamanho, stock, preco, cor) VALUES ($1, $2, $3, $4, $5)',
+                produto_id, t.tamanho, t.stock, preco_var, t.cor,
             )
         stock_total = sum(t.stock for t in produto.tamanhos)
         tam_base = produto.tamanhos[0].tamanho if produto.tamanhos else None

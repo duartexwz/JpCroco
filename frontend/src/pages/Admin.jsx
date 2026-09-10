@@ -449,7 +449,7 @@ function ProdutoModal({ produto, onClose, onSave }) {
   const [preco, setPreco] = useState(produto?.preco ?? '');
   const [promo, setPromo] = useState(produto?.preco_promocional ?? '');
   const [tams, setTams] = useState(
-    produto?.tamanhos?.length ? produto.tamanhos.map((t) => ({ tamanho: t.tamanho, stock: t.stock })) : [{ tamanho: 'M', stock: 10 }],
+    produto?.tamanhos?.length ? produto.tamanhos.map((t) => ({ tamanho: t.tamanho, stock: t.stock, cor: t.cor || '' })) : [{ tamanho: 'M', stock: 10, cor: '' }],
   );
   const [cor, setCor] = useState(produto?.cor || '');
   const [imagens, setImagens] = useState(
@@ -496,7 +496,7 @@ function ProdutoModal({ produto, onClose, onSave }) {
         preco_promocional: promo === '' ? null : Number(promo),
         cor: cor.trim() || null,
         imagem: imagens[0] || null, imagens,
-        tamanhos: tams.map((t) => ({ tamanho: t.tamanho, stock: Number(t.stock) || 0 })),
+        tamanhos: tams.map((t) => ({ tamanho: t.tamanho, stock: Number(t.stock) || 0, cor: t.cor?.trim() || null })),
       });
     } finally {
       setSaving(false);
@@ -514,17 +514,19 @@ function ProdutoModal({ produto, onClose, onSave }) {
             <div className="form-group"><label className="form-label">Promo (opcional)</label><input type="number" step="0.01" value={promo} onChange={(e) => setPromo(e.target.value)} /></div>
           </div>
           <div className="form-group"><label className="form-label">Cor (opcional)</label><input value={cor} onChange={(e) => setCor(e.target.value)} placeholder="Ex: Verde, Preto, Branco" maxLength={30} /></div>
-          <div className="form-group"><label className="form-label">Tamanhos e estoque *</label>
+          <div className="form-group"><label className="form-label">Tamanhos e estoque * (opcional: cor de cada tamanho)</label>
             {tams.map((t, i) => (
               <div className="tam-row" key={i}>
                 <select value={t.tamanho} onChange={(e) => setTams(tams.map((x, j) => j === i ? { ...x, tamanho: e.target.value } : x))}>
                   {TAMANHOS.map((s) => <option key={s}>{s}</option>)}
                 </select>
+                <input value={t.cor || ''} maxLength={30} placeholder="Cor (ex: Verde)"
+                  onChange={(e) => setTams(tams.map((x, j) => j === i ? { ...x, cor: e.target.value } : x))} />
                 <input type="number" min={0} value={t.stock} onChange={(e) => setTams(tams.map((x, j) => j === i ? { ...x, stock: e.target.value } : x))} placeholder="Estoque" />
                 <button className="mini-btn danger" onClick={() => setTams(tams.filter((_, j) => j !== i))}>✕</button>
               </div>
             ))}
-            <button className="mini-btn" onClick={() => setTams([...tams, { tamanho: 'M', stock: 10 }])}>+ Tamanho</button>
+            <button className="mini-btn" onClick={() => setTams([...tams, { tamanho: 'M', stock: 10, cor: '' }])}>+ Tamanho</button>
           </div>
           <div className="form-group"><label className="form-label">Imagens (a primeira é a capa)</label>
             {imagens.length > 0 && (
