@@ -29,6 +29,22 @@ async def lifespan(app: FastAPI):  # pragma: no cover
 app = FastAPI(lifespan=lifespan)
 
 
+@app.middleware('http')
+async def strip_api_prefix(request, call_next):  # pragma: no cover
+    """Remove o prefixo /api quando presente.
+
+    No Docker o nginx já remove o prefixo no proxy_pass; na Vercel o
+    rewrite encaminha o caminho cheio (/api/login/) ao backend, cujas
+    rotas são registradas sem prefixo (/login/). Sem isso tudo dá 404.
+    """
+    path = request.scope.get('path', '')
+    if path == '/api':
+        request.scope['path'] = '/'
+    elif path.startswith('/api/'):
+        request.scope['path'] = path[4:]
+    return await call_next(request)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
