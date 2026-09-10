@@ -6,7 +6,7 @@ import asyncpg
 
 from api.database import get_db
 from api.security import get_current_admin
-from api.services.correios import calcular_frete, peso_taxavel, validar_dimensoes
+from api.services.melhorenvio import calcular as calcular_me
 
 router = APIRouter(prefix='/frete', tags=['frete'])
 
@@ -16,6 +16,7 @@ AdminUser = Annotated[dict, Depends(get_current_admin)]
 # DF (70/71 e parte de 73) e cidades do Entorno atendidas localmente (72/73).
 # Para esses CEPs a loja não deve consultar nem expor dados dos Correios.
 CEP_DF_ENTORNO_PREFIXOS = ('70', '71', '72', '73')
+
 
 class CalcularFreteRequest(BaseModel):
     cepDestino: str
@@ -29,52 +30,25 @@ class CalcularFreteRequest(BaseModel):
     # para cálculo por carrinho: lista de produto_ids + qtd
     itens: Optional[list[dict]] = None
 
-def _extrair_valor_prazo(resposta: dict, co_produto: str, fallback_valor: float, fallback_prazo: int) -> tuple[float, int]:
-    """Extrai valor e prazo da resposta heterogênea da API dos Correios.
 
-    A API CWS pode devolver formatos diferentes conforme versão/ambiente
-    (lista de itens, dict aninhado, strings com vírgula decimal). O parser é
-    defensivo: tenta vários caminhos e cai no fallback calculado por peso.
-    """
-    valor, prazo = fallback_valor, fallback_prazo
-    if not isinstance(resposta, dict):
-        return valor, prazo
-    candidatos = []
-    for chave in ('preco', 'precos', 'dados', 'itens', 'result', 'resultado'):
-        v = resposta.get(chave)
-        if isinstance(v, list):
-            candidatos.extend(v)
-        elif isinstance(v, dict):
-            candidatos.append(v)
-    candidatos.append(resposta)
-    for item in candidatos:
-        if not isinstance(item, dict):
-            continue
-        for k in ('vlTotal', 'valor', 'preco', 'price', 'vl_preco'):
-            raw = item.get(k)
-            if raw is None:
-                continue
-            try:
-                if isinstance(raw, str):
-                    raw = raw.replace('R$', '').strip().replace('.', '').replace(',', '.') if ',' in raw else raw
-                num = float(raw)
-                if num > 0:
-                    valor = round(num, 2)
-                    break
-            except (ValueError, TypeError):
-                continue
-        for k in ('prazoEntrega', 'prazo', 'dias', 'prazo_dias'):
-            raw = item.get(k)
-            if raw is None:
-                continue
-            try:
-                num = int(str(raw).split()[0])
-                if num > 0:
-                    prazo = num
-                    break
-            except (ValueError, TypeError, IndexError):
-                continue
-    return valor, prazo
+def peso_taxavel(psObjeto_g: int, comp: int, larg: int, alt: int) -> int:
+    cubado_kg = (comp * larg * alt) / 6000
+    if cubado_kg <= 5:
+        return psObjeto_g
+    cubado_g = int(cubado_kg * 1000)
+    return max(psObjeto_g, cubado_g)
+
+
+def validar_dimensoes(comp: int, larg: int, alt: int):
+    soma = comp + larg + alt
+    if not (15 <= comp <= 100):
+        raise ValueError('Comprimento deve ser 15-100cm')
+    if not (10 <= larg <= 100):
+        raise ValueError('Largura deve ser 10-100cm')
+    if not (1 <= alt <= 100):
+        raise ValueError('Altura deve ser 1-100cm')
+    if not (29 <= soma <= 200):
+        raise ValueError('Soma C+L+A deve ser 29-200cm')
 
 
 @router.post('/calcular')
@@ -119,69 +93,21 @@ async def calcular(req: CalcularFreteRequest, db: dbConnection):
         validar_dimensoes(comp,larg,alt)
         taxavel = peso_taxavel(ps, comp,larg,alt)
 
-        # Se sem credenciais, retorna mock para teste
+        # Melhor Envio é o único provedor (sem mock: preço chutado cobraria frete errado).
         from api.settings import settings
-        # 1) Melhor Envio (produção, sem contrato próprio)
-        if settings.MELHORENVIO_TOKEN:
-            from api.services.melhorenvio import calcular as calcular_me
-            try:
-                opcoes = await calcular_me(
-                    req.cepDestino, ps, comp, larg, alt,
-                    valor_declarado=float(req.vlDeclarado or 0),
-                    db=db,
-                )
-            except Exception as e:
-                # Cai para o Correios/mock abaixo em vez de quebrar o checkout
-                import logging as _lgme
-                _lgme.getLogger('frete').warning('Melhor Envio falhou, tentando Correios: %s', str(e)[:200])
-            else:
-                return {
-                    'cepDestino': req.cepDestino,
-                    'pesoReal': ps,
-                    'pesoCubadoKg': round((comp * larg * alt) / 6000, 2),
-                    'pesoTaxavel': taxavel,
-                    'dimensoes': {'comp': comp, 'larg': larg, 'alt': alt},
-                    'opcoes': opcoes,
-                    'mock': False,
-                    'provedor': 'melhorenvio',
-                }
-        if not settings.CORREIOS_USER:
-            # mock: R$ 18 + 0.02 por grama taxavel + prazo 5 dias
-            mock_valor = round(18 + (taxavel/1000)*4,2)
-            return {
-                "cepDestino": req.cepDestino,
-                "pesoReal": ps,
-                "pesoCubadoKg": round((comp*larg*alt)/6000,2),
-                "pesoTaxavel": taxavel,
-                "dimensoes": {"comp":comp,"larg":larg,"alt":alt},
-                "mock": True,
-                "opcoes": [
-                    {"servico":"PAC","coProduto":"04510","valor":mock_valor,"prazo":5},
-                    {"servico":"SEDEX","coProduto":"04014","valor":round(mock_valor*1.6,2),"prazo":2},
-                ]
-            }
-
-        res = await calcular_frete(req.cepDestino, ps, comp, larg, alt, req.tpObjeto or 2, req.vlDeclarado, req.coProduto)
-        # Normaliza a resposta real dos Correios para o mesmo formato do mock
-        # (o frontend sempre espera `opcoes`). Nunca retorna prazo/preco crus.
-        from api.settings import settings as _s
-        base_mock = round(18 + (taxavel / 1000) * 4, 2)
+        if not settings.MELHORENVIO_TOKEN:
+            raise HTTPException(
+                status_code=502,
+                detail='Frete indisponível: token do Melhor Envio não configurado.',
+            )
         try:
-            prazo_raw, preco_raw = res.get('prazo', {}), res.get('preco', {})
-            v_pac, p_pac = _extrair_valor_prazo(preco_raw if isinstance(preco_raw, dict) else {}, _s.CORREIOS_CO_PRODUTO_PAC, base_mock, 5)
-            # tenta extrair prazo do payload de prazo separadamente
-            _, p_pac2 = _extrair_valor_prazo(prazo_raw if isinstance(prazo_raw, dict) else {}, _s.CORREIOS_CO_PRODUTO_PAC, v_pac, p_pac)
-            v_sedex, p_sedex = _extrair_valor_prazo(preco_raw if isinstance(preco_raw, dict) else {}, _s.CORREIOS_CO_PRODUTO_SEDEX, round(base_mock * 1.6, 2), 2)
-            _, p_sedex2 = _extrair_valor_prazo(prazo_raw if isinstance(prazo_raw, dict) else {}, _s.CORREIOS_CO_PRODUTO_SEDEX, v_sedex, p_sedex)
-            opcoes = [
-                {'servico': 'PAC', 'coProduto': _s.CORREIOS_CO_PRODUTO_PAC, 'valor': v_pac, 'prazo': p_pac2},
-                {'servico': 'SEDEX', 'coProduto': _s.CORREIOS_CO_PRODUTO_SEDEX, 'valor': v_sedex, 'prazo': p_sedex2},
-            ]
-        except Exception:
-            opcoes = [
-                {'servico': 'PAC', 'coProduto': _s.CORREIOS_CO_PRODUTO_PAC, 'valor': base_mock, 'prazo': 5},
-                {'servico': 'SEDEX', 'coProduto': _s.CORREIOS_CO_PRODUTO_SEDEX, 'valor': round(base_mock * 1.6, 2), 'prazo': 2},
-            ]
+            opcoes = await calcular_me(
+                req.cepDestino, ps, comp, larg, alt,
+                valor_declarado=float(req.vlDeclarado or 0),
+                db=db,
+            )
+        except (ValueError, RuntimeError) as e:
+            raise HTTPException(status_code=502, detail=str(e))
         return {
             'cepDestino': req.cepDestino,
             'pesoReal': ps,
@@ -190,10 +116,12 @@ async def calcular(req: CalcularFreteRequest, db: dbConnection):
             'dimensoes': {'comp': comp, 'larg': larg, 'alt': alt},
             'opcoes': opcoes,
             'mock': False,
-            'raw': {'prazo': res.get('prazo'), 'preco': res.get('preco')},
+            'provedor': 'melhorenvio',
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 

@@ -55,19 +55,8 @@ class Settings(BaseSettings):
     MELHORENVIO_FROM_CEP: str = ''
     MELHORENVIO_FROM_TELEFONE: str = ''
     MELHORENVIO_FROM_EMAIL: str = ''
-    # Correios CWS
-    CORREIOS_USER: str = ''
-    CORREIOS_SENHA: str = ''
-    # Cartão de postagem (obrigatório p/ Preço/Prazo) + contrato/DR opcionais.
-    CORREIOS_CARTAO: str = ''
-    CORREIOS_CONTRATO: str = ''
-    CORREIOS_DR: str = ''
-    CORREIOS_CEP_ORIGEM: str = '70002900'
-    CORREIOS_TOKEN_URL: str = 'https://apihom.correios.com.br/token/v1/autentica'
-    CORREIOS_PRECO_URL: str = 'https://apihom.correios.com.br/preco/v1/nacional'
-    CORREIOS_PRAZO_URL: str = 'https://apihom.correios.com.br/prazo/v1/nacional'
-    CORREIOS_CO_PRODUTO_PAC: str = '04510'
-    CORREIOS_CO_PRODUTO_SEDEX: str = '04014'
+    # CEP de origem das postagens (loja)
+    CEP_ORIGEM: str = '72725104'
 
     WHATSAPP_API_URL: str = ''
     WHATSAPP_TOKEN: str = ''

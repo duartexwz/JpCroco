@@ -185,7 +185,7 @@ async def calcular(
     `coProduto` carrega 'ME:<service_id>' para a futura compra da etiqueta.
     """
     cep_dest = ''.join(c for c in cep_destino if c.isdigit())
-    cep_orig = ''.join(c for c in settings.CORREIOS_CEP_ORIGEM if c.isdigit())
+    cep_orig = ''.join(c for c in settings.CEP_ORIGEM if c.isdigit())
     if len(cep_dest) != CEP_LEN or len(cep_orig) != CEP_LEN:
         raise ValueError('CEP origem/destino deve ter 8 dígitos')
     token = await token_resolvido(db)

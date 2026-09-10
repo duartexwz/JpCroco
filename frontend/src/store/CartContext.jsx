@@ -1,23 +1,58 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from './AuthContext';
 
 const CartCtx = createContext(null);
-const KEY = 'carrinho';
+const CHAVE_BASE = 'carrinho';
+const ANONIMO = 'anonimo';
 
-function load() {
+const chaveDe = (dono) => `${CHAVE_BASE}:${dono || ANONIMO}`;
+
+function load(chave) {
   try {
-    return JSON.parse(sessionStorage.getItem(KEY) || '{}');
+    return JSON.parse(sessionStorage.getItem(chave) || '{}');
   } catch {
     return {};
   }
 }
 
+function save(chave, itens) {
+  try {
+    sessionStorage.setItem(chave, JSON.stringify(itens));
+  } catch { /* ignore */ }
+}
+
 export function CartProvider({ children }) {
-  const [itens, setItens] = useState(load);
+  // Carrinho POR USUÁRIO LOGADO: cada conta tem sua chave. Ao sair, a
+  // conta anterior mantém o dela e quem entra vê só o próprio (ou vazio).
+  const { user } = useAuth();
+  const dono = user?.username || ANONIMO;
+  const [itens, setItens] = useState(() => load(chaveDe(dono)));
+  const donoRef = useRef(dono);
+  if (donoRef.current !== dono) {
+    // Troca de conta: guarda o carrinho do dono antigo e carrega o do novo.
+    // Login vindo do anônimo: mescla o que já estava na sacola.
+    const antigos = itens;
+    save(chaveDe(donoRef.current), antigos);
+    let novos = load(chaveDe(dono));
+    if (donoRef.current === ANONIMO && dono !== ANONIMO && Object.keys(antigos).length) {
+      novos = { ...novos };
+      for (const [chave, item] of Object.entries(antigos)) {
+        const atual = novos[chave];
+        if (atual) {
+          const max = Math.max(item.stock || atual.stock || 99, 1);
+          novos[chave] = { ...atual, quantidade: Math.min((atual.quantidade || 0) + (item.quantidade || 0), max) };
+        } else {
+          novos[chave] = item;
+        }
+      }
+      save(chaveDe(ANONIMO), {});
+    }
+    donoRef.current = dono;
+    setItens(novos);
+  }
 
   useEffect(() => {
-    try {
-      sessionStorage.setItem(KEY, JSON.stringify(itens));
-    } catch { /* ignore */ }
+    save(chaveDe(donoRef.current), itens);
   }, [itens]);
 
   const value = useMemo(() => {

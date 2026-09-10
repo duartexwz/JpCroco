@@ -130,7 +130,11 @@ export const api = {
     return data;
   },
   logout: () => {
-    sessionStorage.clear();
+    // Remove SÓ as chaves de autenticação: carrinhos por usuário
+    // (carrinho:<dono>) são preservados para a próxima sessão de cada conta.
+    sessionStorage.removeItem('access_token');
+    sessionStorage.removeItem('user');
+    sessionStorage.removeItem('carrinho'); // legado (chave única antiga)
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
     localStorage.removeItem('carrinho');
@@ -167,6 +171,8 @@ export const api = {
 
   // ---- Entrega (100% funcional) ----
   calcularFrete: (d) => request('/frete/calcular', { method: 'POST', body: JSON.stringify(d) }),
+  gerarEtiqueta: (pedidoId, serviceId) =>
+    request(`/frete/etiqueta/${pedidoId}`, { method: 'POST', body: JSON.stringify({ service_id: serviceId }) }),
   consultarCep: async (cep) => {
     const numeros = String(cep).replace(/\D/g, '');
     return request(`/endereco/cep/${numeros}`);
