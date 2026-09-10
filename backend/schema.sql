@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict cZqZcOP2d2q1WMvdW15mtfeUDDmqYAgByajAhzUB211obpCSuska4FrqgjBkc37
+\restrict LA03xFFlnmbVm8MJVws5dIItedxRuIkhmgcQIt1KpHcrMuaGIyoIqNmKgqTGXtS
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -318,6 +318,7 @@ CREATE TABLE public.produtos (
     altura integer DEFAULT 10,
     diametro integer DEFAULT 0,
     tp_objeto integer DEFAULT 2,
+    cor character varying(30),
     CONSTRAINT produtos_preco_check CHECK ((preco >= (0)::numeric)),
     CONSTRAINT produtos_stock_check CHECK ((stock >= 0))
 );
@@ -639,5 +640,5 @@ ALTER TABLE ONLY public.produto_tamanhos
 -- PostgreSQL database dump complete
 --
 
-\unrestrict cZqZcOP2d2q1WMvdW15mtfeUDDmqYAgByajAhzUB211obpCSuska4FrqgjBkc37
+\unrestrict LA03xFFlnmbVm8MJVws5dIItedxRuIkhmgcQIt1KpHcrMuaGIyoIqNmKgqTGXtS
 

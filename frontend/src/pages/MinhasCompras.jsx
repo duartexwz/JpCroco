@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import SafeImg from '../components/SafeImg';
 import { useAuth } from '../store/AuthContext';
 import { useToast } from '../store/ToastContext';
 import TrackingBox, { badgeClass, whatsappPedido } from '../components/Tracking';
@@ -96,7 +97,7 @@ export default function MinhasCompras() {
                       const prod = produtos.get(i.produto_id);
                       return (
                         <div className="item-row" key={idx}>
-                          <div className="item-thumb">{prod?.imagem ? <img src={prod.imagem} alt="" /> : '🐊'}</div>
+                          <div className="item-thumb">{prod?.imagem ? <SafeImg src={prod.imagem} alt="" /> : '🐊'}</div>
                           <div>
                             <div style={{ fontWeight: 700, fontSize: '.88rem' }}>{prod?.nome || 'Produto'}</div>
                             <div style={{ fontSize: '.78rem', color: 'var(--cinza-500)' }}>{i.quantidade}x • {i.tamanho ? `Tam: ${i.tamanho} • ` : ''}{api.formatarMoeda(i.preco_unitario)}</div>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import ConfirmModal from '../components/ConfirmModal';
+import SafeImg from '../components/SafeImg';
 import { useAuth } from '../store/AuthContext';
 import { useToast } from '../store/ToastContext';
 import { useAdminNotify } from '../hooks/useAdminNotify';
@@ -249,11 +250,12 @@ export default function Admin() {
                 </div>
                 <div className="search-row"><input value={buscaProd} onChange={(e) => setBuscaProd(e.target.value)} placeholder="Buscar produto..." /></div>
                 <div style={{ overflowX: 'auto' }}>
-                  <table className="tbl"><thead><tr><th></th><th>Nome</th><th>Preço</th><th>Tamanhos</th><th>Estoque</th><th></th></tr></thead>
+                  <table className="tbl"><thead><tr><th></th><th>Nome</th><th>Cor</th><th>Preço</th><th>Tamanhos</th><th>Estoque</th><th></th></tr></thead>
                     <tbody>{prodsFiltrados.map((p) => (
                       <tr key={p.id}>
-                        <td>{p.imagem ? <img className="tbl-img" src={p.imagem} alt="" /> : '🐊'}</td>
+                        <td>{p.imagem ? <SafeImg className="tbl-img" src={p.imagem} alt="" /> : '🐊'}</td>
                         <td><b>{p.nome}</b></td>
+                        <td>{p.cor || '—'}</td>
                         <td>{p.preco_promocional ? <>{api.formatarMoeda(p.preco_promocional)} <s style={{ color: 'var(--cinza-400)', fontSize: '.75rem' }}>{api.formatarMoeda(p.preco)}</s></> : api.formatarMoeda(p.preco)}</td>
                         <td>{p.tamanhos?.map((t) => t.tamanho).join(', ') || p.tamanho || '—'}</td>
                         <td>{p.stock}</td>
@@ -449,25 +451,51 @@ function ProdutoModal({ produto, onClose, onSave }) {
   const [tams, setTams] = useState(
     produto?.tamanhos?.length ? produto.tamanhos.map((t) => ({ tamanho: t.tamanho, stock: t.stock })) : [{ tamanho: 'M', stock: 10 }],
   );
-  const [imagemUrl, setImagemUrl] = useState(produto?.imagem || '');
-  const [file, setFile] = useState(null);
+  const [cor, setCor] = useState(produto?.cor || '');
+  const [imagens, setImagens] = useState(
+    produto?.imagens?.length ? [...produto.imagens] : (produto?.imagem ? [produto.imagem] : []),
+  );
+  const [urlAvulsa, setUrlAvulsa] = useState('');
+  const [enviando, setEnviando] = useState(false);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+
+  const TAMANHOS = ['P', 'M', 'G', 'GG', 'XG', 'Único'];
+
+  const enviarArquivos = async (fileList) => {
+    const arqs = [...(fileList || [])];
+    if (!arqs.length) return;
+    setEnviando(true);
+    try {
+      const r = await api.uploadImagens(arqs);
+      const novas = r.urls || (r.url ? [r.url] : []);
+      if (!novas.length) throw new Error('Upload sem retorno.');
+      setImagens((atuais) => [...atuais, ...novas]);
+      toast(`${novas.length} imagem(ns) enviada(s).`, 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const adicionarUrl = () => {
+    const u = urlAvulsa.trim();
+    if (!u) return;
+    setImagens((atuais) => [...atuais, u]);
+    setUrlAvulsa('');
+  };
 
   const salvar = async () => {
     if (!nome.trim() || !preco) return toast('Preencha nome e preço.', 'error');
     if (!tams.length || tams.some((t) => !t.tamanho)) return toast('Informe ao menos um tamanho.', 'error');
     setSaving(true);
     try {
-      let imagem = imagemUrl;
-      if (file) {
-        const r = await api.uploadImagem(file);
-        imagem = r.url;
-      }
       await onSave(produto?.id, {
         nome: nome.trim(), preco: Number(preco),
         preco_promocional: promo === '' ? null : Number(promo),
-        imagem, imagens: imagem ? [imagem] : [],
+        cor: cor.trim() || null,
+        imagem: imagens[0] || null, imagens,
         tamanhos: tams.map((t) => ({ tamanho: t.tamanho, stock: Number(t.stock) || 0 })),
       });
     } finally {
@@ -485,11 +513,12 @@ function ProdutoModal({ produto, onClose, onSave }) {
             <div className="form-group"><label className="form-label">Preço *</label><input type="number" step="0.01" value={preco} onChange={(e) => setPreco(e.target.value)} /></div>
             <div className="form-group"><label className="form-label">Promo (opcional)</label><input type="number" step="0.01" value={promo} onChange={(e) => setPromo(e.target.value)} /></div>
           </div>
+          <div className="form-group"><label className="form-label">Cor (opcional)</label><input value={cor} onChange={(e) => setCor(e.target.value)} placeholder="Ex: Verde, Preto, Branco" maxLength={30} /></div>
           <div className="form-group"><label className="form-label">Tamanhos e estoque *</label>
             {tams.map((t, i) => (
               <div className="tam-row" key={i}>
                 <select value={t.tamanho} onChange={(e) => setTams(tams.map((x, j) => j === i ? { ...x, tamanho: e.target.value } : x))}>
-                  {['P', 'M', 'G', 'GG', 'XG'].map((s) => <option key={s}>{s}</option>)}
+                  {TAMANHOS.map((s) => <option key={s}>{s}</option>)}
                 </select>
                 <input type="number" min={0} value={t.stock} onChange={(e) => setTams(tams.map((x, j) => j === i ? { ...x, stock: e.target.value } : x))} placeholder="Estoque" />
                 <button className="mini-btn danger" onClick={() => setTams(tams.filter((_, j) => j !== i))}>✕</button>
@@ -497,10 +526,32 @@ function ProdutoModal({ produto, onClose, onSave }) {
             ))}
             <button className="mini-btn" onClick={() => setTams([...tams, { tamanho: 'M', stock: 10 }])}>+ Tamanho</button>
           </div>
-          <div className="form-group"><label className="form-label">Imagem (URL ou arquivo)</label>
-            <input value={imagemUrl} onChange={(e) => setImagemUrl(e.target.value)} placeholder="https://..." />
-            <input type="file" accept="image/jpeg,image/png,image/webp" style={{ marginTop: 8 }} onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            {(imagemUrl || produto?.imagem) && <img src={imagemUrl || produto.imagem} alt="" style={{ width: 90, height: 90, objectFit: 'cover', borderRadius: 10, marginTop: 8 }} />}
+          <div className="form-group"><label className="form-label">Imagens (a primeira é a capa)</label>
+            {imagens.length > 0 && (
+              <div className="admin-thumbs">
+                {imagens.map((u, i) => (
+                  <div className="admin-thumb" key={`${i}-${u}`}>
+                    <img src={u} alt="" onError={(e) => { e.currentTarget.style.opacity = '.25'; }} />
+                    {i === 0 && <span className="admin-thumb-capa">Capa</span>}
+                    <button type="button" className="admin-thumb-x" title="Remover"
+                      onClick={() => setImagens(imagens.filter((_, j) => j !== i))}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="form-row" style={{ marginTop: 8 }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <input value={urlAvulsa} onChange={(e) => setUrlAvulsa(e.target.value)} placeholder="Colar URL https://..." />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0, maxWidth: 120 }}>
+                <button type="button" className="mini-btn" style={{ width: '100%', height: '100%' }} onClick={adicionarUrl}>+ URL</button>
+              </div>
+            </div>
+            <label className="mini-btn" style={{ marginTop: 8, display: 'inline-block', cursor: 'pointer', opacity: enviando ? .6 : 1 }}>
+              {enviando ? 'Enviando…' : '+ Enviar arquivos'}
+              <input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden disabled={enviando}
+                onChange={(e) => { enviarArquivos(e.target.files); e.target.value = ''; }} />
+            </label>
           </div>
         </div>
         <div className="drawer-foot" style={{ display: 'flex', gap: 8 }}>

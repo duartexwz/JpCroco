@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useCart } from '../store/CartContext';
 import { api } from '../api/client';
+import SafeImg from './SafeImg';
 
 export default function CartDrawer({ open, onClose, onCheckout }) {
   const { arr, subtotal, alterarQuantidade, remover } = useCart();
@@ -24,7 +25,7 @@ export default function CartDrawer({ open, onClose, onCheckout }) {
           ) : (
             arr.map((item) => (
               <div className="cart-item" key={item.chave}>
-                <div className="cart-thumb">{item.imagem ? <img src={item.imagem} alt={item.nome} /> : '🐊'}</div>
+                <div className="cart-thumb">{item.imagem ? <SafeImg src={item.imagem} alt={item.nome} /> : '🐊'}</div>
                 <div className="cart-info">
                   <div className="cart-name">{item.nome}</div>
                   <div className="cart-meta">{item.tamanho ? `Tam: ${item.tamanho}` : ''}</div>

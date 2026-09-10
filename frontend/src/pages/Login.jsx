@@ -86,8 +86,8 @@ export default function Login() {
 
           {modo === 'login' && (
             <form onSubmit={entrar}>
-              <div className="form-group"><label className="form-label">Email</label><input type="email" required value={form.email} onChange={set('email')} placeholder="seu@email.com" /></div>
-              <div className="form-group"><label className="form-label">Senha</label><input type="password" required value={form.senha} onChange={set('senha')} placeholder="Sua senha" /></div>
+              <div className="form-group"><label className="form-label">Email</label><input type="email" required autoComplete="email" value={form.email} onChange={set('email')} placeholder="seu@email.com" /></div>
+              <div className="form-group"><label className="form-label">Senha</label><input type="password" required autoComplete="current-password" value={form.senha} onChange={set('senha')} placeholder="Sua senha" /></div>
               <div style={{ textAlign: 'right', marginBottom: 12 }}>
                 <button type="button" onClick={() => { setModo('forgot'); setErro(''); }} style={{ color: 'var(--verde)', fontWeight: 600, fontSize: '.85rem' }}>Esqueci minha senha</button>
               </div>
@@ -97,11 +97,11 @@ export default function Login() {
 
           {modo === 'register' && (
             <form onSubmit={registrar}>
-              <div className="form-group"><label className="form-label">Email</label><input type="email" required value={form.email} onChange={set('email')} placeholder="seu@email.com" /></div>
-              <div className="form-group"><label className="form-label">Nome Completo</label><input required value={form.nome} onChange={set('nome')} placeholder="Seu nome completo" /></div>
+              <div className="form-group"><label className="form-label">Email</label><input type="email" required autoComplete="email" value={form.email} onChange={set('email')} placeholder="seu@email.com" /></div>
+              <div className="form-group"><label className="form-label">Nome Completo</label><input required autoComplete="name" value={form.nome} onChange={set('nome')} placeholder="Seu nome completo" /></div>
               <div className="form-row">
-                <div className="form-group"><label className="form-label">Senha</label><input type="password" required minLength={6} value={form.senha} onChange={set('senha')} placeholder="Mín. 6 caracteres" /></div>
-                <div className="form-group"><label className="form-label">Confirmar</label><input type="password" required value={form.confirma} onChange={set('confirma')} placeholder="Repita a senha" /></div>
+                <div className="form-group"><label className="form-label">Senha</label><input type="password" required minLength={6} autoComplete="new-password" value={form.senha} onChange={set('senha')} placeholder="Mín. 6 caracteres" /></div>
+                <div className="form-group"><label className="form-label">Confirmar</label><input type="password" required autoComplete="new-password" value={form.confirma} onChange={set('confirma')} placeholder="Repita a senha" /></div>
               </div>
               <button className="btn btn-primary btn-block btn-lg" disabled={loading}>{loading ? 'Criando...' : 'Criar Conta'}</button>
             </form>

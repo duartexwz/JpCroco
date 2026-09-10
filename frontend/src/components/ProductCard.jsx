@@ -1,4 +1,5 @@
 import { api } from '../api/client';
+import SafeImg from './SafeImg';
 
 export default function ProductCard({ produto, onDetail }) {
   const semEstoque = (produto.stock ?? 0) <= 0;
@@ -11,7 +12,7 @@ export default function ProductCard({ produto, onDetail }) {
   return (
     <article className="product-card" onClick={() => onDetail(produto)}>
       <div className="product-img">
-        {img ? <img src={img} alt={produto.nome} loading="lazy" /> : <span>🐊</span>}
+        {img ? <SafeImg src={img} alt={produto.nome} /> : <span>🐊</span>}
         {semEstoque
           ? <span className="product-tag out">Esgotado</span>
           : (temPromo && <span className="product-tag promo">Promo</span>)}

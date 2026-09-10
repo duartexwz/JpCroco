@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api/client';
+import SafeImg from './SafeImg';
 import { useCart } from '../store/CartContext';
 import { useToast } from '../store/ToastContext';
 
@@ -35,12 +36,15 @@ export default function ProductModal({ produto, onClose }) {
         </div>
         <div className="drawer-body">
           <div className="product-img" style={{ borderRadius: 14, aspectRatio: '4/3' }}>
-            {imagens[imgIdx] ? <img src={imagens[imgIdx]} alt={produto.nome} /> : <span>🐊</span>}
+            {imagens[imgIdx] ? <SafeImg src={imagens[imgIdx]} alt={produto.nome} /> : <span>🐊</span>}
           </div>
+          {produto.cor && (
+            <p style={{ marginTop: 10, fontSize: '.88rem', color: 'var(--cinza-600)' }}>Cor: <b>{produto.cor}</b></p>
+          )}
           {imagens.length > 1 && (
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               {imagens.map((u, i) => (
-                <img key={i} src={u} alt="" onClick={() => setImgIdx(i)}
+                <SafeImg key={i} src={u} alt="" onClick={() => setImgIdx(i)}
                   style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, cursor: 'pointer', border: i === imgIdx ? '2px solid var(--verde)' : '1px solid var(--cinza-200)' }} />
               ))}
             </div>

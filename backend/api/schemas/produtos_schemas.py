@@ -15,6 +15,7 @@ class ProdutosSchema(BaseModel):
     imagem: Optional[str] = None
     imagens: Optional[list[str]] = None
     preco_promocional: Optional[float] = None
+    cor: Optional[str] = None
     tamanhos: list[TamanhoSchema] = []
 
 
@@ -29,6 +30,7 @@ class ProdutosResponse(BaseModel):
     imagem: Optional[str] = None
     imagens: list[str] = []
     preco_promocional: Optional[float] = None
+    cor: Optional[str] = None
     tamanhos: list[TamanhoSchema] = []
 
 
@@ -38,6 +40,7 @@ class ProdutosUpdate(BaseModel):
     imagem: Optional[str] = None
     imagens: Optional[list[str]] = None
     preco_promocional: Optional[float] = None
+    cor: Optional[str] = None
     tamanhos: Optional[list[TamanhoSchema]] = None
 
 

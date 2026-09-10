@@ -159,6 +159,11 @@ export const api = {
     fd.append('file', file);
     return request('/upload/imagem', { method: 'POST', body: fd });
   },
+  uploadImagens: async (files) => {
+    const fd = new FormData();
+    [...files].forEach((f) => fd.append('files', f));
+    return request('/upload/imagem', { method: 'POST', body: fd });
+  },
 };
 
 export const VENDEDOR_WHATSAPP =

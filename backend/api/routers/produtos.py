@@ -78,9 +78,9 @@ async def create_produto(produto: ProdutosSchema, db: database_loja, current_use
     imagem_cover = imagens[0] if imagens else None
 
     insert_query = """
-    INSERT INTO produtos (nome, preco, tamanho, stock, imagem, preco_promocional)
-    VALUES ($1, $2, $3, $4, $5, $6)
-    RETURNING id, nome, preco, tamanho, stock, imagem, preco_promocional
+    INSERT INTO produtos (nome, preco, tamanho, stock, imagem, preco_promocional, cor)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING id, nome, preco, tamanho, stock, imagem, preco_promocional, cor
     """
     result = await db.fetchrow(
         insert_query,
@@ -90,6 +90,7 @@ async def create_produto(produto: ProdutosSchema, db: database_loja, current_use
         stock_base,
         imagem_cover,
         produto.preco_promocional,
+        produto.cor,
     )
 
     if not result:
@@ -114,7 +115,7 @@ async def create_produto(produto: ProdutosSchema, db: database_loja, current_use
 
 @router.get('/', response_model=ProdutosList, status_code=HTTPStatus.OK)
 async def listar_produtos(filtrar: Annotated[FilterProdutos, Depends()], db: database_loja):
-    query = 'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional FROM produtos WHERE 1=1'
+    query = 'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional, cor FROM produtos WHERE 1=1'
     params = []
     param_index = 1
 
@@ -210,7 +211,7 @@ async def atualizar_produto(produto_id: int, produto: ProdutosUpdate, db: databa
             UPDATE produtos
             SET {set_query}
             WHERE id = ${param_index}
-            RETURNING id, nome, preco, tamanho, stock, imagem, preco_promocional
+            RETURNING id, nome, preco, tamanho, stock, imagem, preco_promocional, cor
         """
 
         result = await db.fetchrow(query, *params)
@@ -222,7 +223,7 @@ async def atualizar_produto(produto_id: int, produto: ProdutosUpdate, db: databa
             )
     else:
         result = await db.fetchrow(
-            'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional FROM produtos WHERE id = $1',
+            'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional, cor FROM produtos WHERE id = $1',
             produto_id,
         )
 
@@ -242,7 +243,7 @@ async def atualizar_produto(produto_id: int, produto: ProdutosUpdate, db: databa
             stock_total, tam_base, produto_id,
         )
         result = await db.fetchrow(
-            'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional FROM produtos WHERE id = $1',
+            'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional, cor FROM produtos WHERE id = $1',
             produto_id,
         )
 
@@ -254,7 +255,7 @@ async def atualizar_produto(produto_id: int, produto: ProdutosUpdate, db: databa
             nova_cover, produto_id,
         )
         result = await db.fetchrow(
-            'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional FROM produtos WHERE id = $1',
+            'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional, cor FROM produtos WHERE id = $1',
             produto_id,
         )
 
