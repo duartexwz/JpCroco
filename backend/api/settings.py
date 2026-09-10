@@ -8,6 +8,12 @@ class Settings(BaseSettings):
     )
 
     DATABASE_URL: str
+    # Conexão direta (sem pgbouncer) — usada por migrações/DDL. Opcional.
+    DATABASE_URL_UNPOOLED: str = ''
+    # Pool lazy (min 0 = sem conexão no startup) e enxuto: seguro para
+    # serverless (Vercel), onde conexão eager no cold start pode falhar.
+    DB_POOL_MIN_SIZE: int = 0
+    DB_POOL_MAX_SIZE: int = 1
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     CLIENT_SECRET: str
     CLIENT_ID: int

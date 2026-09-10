@@ -1,19 +1,29 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.database import create_db_pool
+from api.database import ensure_pool
 from api.routers import admins, cliente, consent, endereco, frete, itens_pedido, login, pagamento, pedidos, produtos, push, rastreio, upload, usuarios
 from api.settings import settings
+
+log = logging.getLogger('db')
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # pragma: no cover
-    app.state.pool = await create_db_pool()
+    # Eager quando possível, mas nunca derruba o startup no serverless:
+    # o pool é criado sob demanda na primeira requisição (ensure_pool).
+    try:
+        app.state.pool = await ensure_pool(app)
+    except Exception as e:
+        log.warning('Pool DB adiado para primeira requisição: %s', str(e)[:200])
+        app.state.pool = None
     yield
 
-    await app.state.pool.close()
+    if getattr(app.state, 'pool', None) is not None:
+        await app.state.pool.close()
 
 
 app = FastAPI(lifespan=lifespan)

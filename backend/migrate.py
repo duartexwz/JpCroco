@@ -15,7 +15,7 @@ from pathlib import Path
 
 import asyncpg
 
-from api.settings import settings
+from api.database import db_connect_kwargs, db_url_for_ddl
 
 
 async def ensure_migrations_table(conn: asyncpg.Connection):
@@ -43,7 +43,8 @@ def file_version(path: Path) -> str:
 
 
 async def migrate_up():
-    conn = await asyncpg.connect(settings.DATABASE_URL)
+    url = db_url_for_ddl()
+    conn = await asyncpg.connect(url, **db_connect_kwargs(url))
     try:
         await ensure_migrations_table(conn)
         applied = await get_applied(conn)
@@ -73,7 +74,8 @@ async def migrate_up():
 
 
 async def migrate_status():
-    conn = await asyncpg.connect(settings.DATABASE_URL)
+    url = db_url_for_ddl()
+    conn = await asyncpg.connect(url, **db_connect_kwargs(url))
     try:
         await ensure_migrations_table(conn)
         applied = await get_applied(conn)
@@ -94,7 +96,8 @@ async def migrate_status():
 
 
 async def migrate_down():
-    conn = await asyncpg.connect(settings.DATABASE_URL)
+    url = db_url_for_ddl()
+    conn = await asyncpg.connect(url, **db_connect_kwargs(url))
     try:
         await ensure_migrations_table(conn)
         applied = await get_applied(conn)

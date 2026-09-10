@@ -13,7 +13,7 @@ from typing import Annotated
 import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
-from api.database import get_db
+from api.database import db_connect_kwargs, get_db
 from api.security import get_current_admin
 from api.settings import settings
 
@@ -85,7 +85,7 @@ async def _send_one(sub: dict, titulo: str, corpo: str) -> None:
         # Subscription morta (404/410): remove para não tentar de novo
         if status in (404, 410):
             try:
-                conn = await asyncpg.connect(settings.DATABASE_URL)
+                conn = await asyncpg.connect(settings.DATABASE_URL, **db_connect_kwargs())
                 try:
                     await conn.execute('DELETE FROM push_subscriptions WHERE endpoint = $1', sub['endpoint'])
                 finally:
@@ -99,7 +99,7 @@ async def tarefa_push_admins(titulo: str, corpo: str) -> None:
     if not settings.VAPID_PRIVATE_KEY or not settings.VAPID_PUBLIC_KEY:
         return
     try:
-        conn = await asyncpg.connect(settings.DATABASE_URL)
+        conn = await asyncpg.connect(settings.DATABASE_URL, **db_connect_kwargs())
     except Exception as e:
         log.warning('Push: sem banco: %s', str(e)[:150])
         return
