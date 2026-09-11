@@ -25,10 +25,15 @@ function getUser() {
   }
 }
 
+// Erro interno: requisição 401 sem sessão (ex: polling após logout).
+// O ToastContext o ignora — serve só para abortar a chamada sem barulho.
+export const ERRO_SAIDA = '__sessao_encerrada__';
+
 async function request(path, options = {}) {
   // Normaliza: chama /api/payments/... como /payments/... (vite proxy já tem /api)
   const clean = path.startsWith('/api/') ? path.slice(4) : path;
   const url = `${API_BASE}${clean}`;
+  const tokenInicial = getToken();
   const doFetch = async (token) => {
     const headers = { ...(options.headers || {}) };
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -45,10 +50,21 @@ async function request(path, options = {}) {
   // 401 em rota autenticada: tenta renovar o token em silêncio UMA vez e
   // repete a requisição. Só desloga se a renovação falhar.
   if (res.status === 401 && !path.includes('/login')) {
+    if (!tokenInicial || !getToken()) {
+      // Sem sessão (ex: saiu durante a chamada): aborta em silêncio.
+      logoutLocal();
+      if (!String(window.location.hash || '').startsWith('#/login')) window.location.href = '/#/login';
+      throw new Error(ERRO_SAIDA);
+    }
     try {
       await refreshToken();
       res = await doFetch(getToken());
     } catch {
+      if (!getToken()) {
+        logoutLocal();
+        if (!String(window.location.hash || '').startsWith('#/login')) window.location.href = '/#/login';
+        throw new Error(ERRO_SAIDA);
+      }
       logoutLocal();
       window.location.href = '/#/login';
       throw new Error('Sessão expirada. Faça login novamente.');

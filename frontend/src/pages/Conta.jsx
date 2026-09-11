@@ -99,7 +99,7 @@ export default function Conta() {
             <div className="avatar" style={{ margin: '0 auto 10px' }}>{(form.nome || user?.username || '?').charAt(0).toUpperCase()}</div>
             <h2 style={{ fontSize: '1.1rem' }}>{form.nome || user?.username}</h2>
             <p style={{ color: 'var(--cinza-500)', fontSize: '.85rem' }}>{form.email || '-'}</p>
-            <button className="btn btn-outline btn-sm btn-block" style={{ marginTop: 14 }} onClick={() => { logout(); navigate('/login'); }}>Sair da Conta</button>
+            <button className="btn btn-outline btn-sm btn-block" style={{ marginTop: 14 }} onClick={() => { logout(); toast('Logout realizado com sucesso.', 'success'); navigate('/login'); }}>Sair da Conta</button>
           </aside>
           <div className="account-main">
             <h3 style={{ fontFamily: 'var(--font-serif)', marginBottom: 4 }}>Dados Pessoais</h3>

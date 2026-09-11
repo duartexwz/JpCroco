@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../api/client';
+import { api, ERRO_SAIDA } from '../api/client';
 import ProductCard from '../components/ProductCard';
 import ProductModal from '../components/ProductModal';
 
@@ -18,7 +18,7 @@ export default function Loja({ onOpenCart }) {
       const data = await api.getProdutos({ limit: 100 });
       setProdutos(data.produtos || []);
     } catch (e) {
-      setErro(e.message);
+      if (e.message !== ERRO_SAIDA) setErro(e.message);
     } finally {
       setLoading(false);
     }

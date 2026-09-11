@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/AuthContext';
+import { useToast } from '../store/ToastContext';
 import { useCart } from '../store/CartContext';
 
 export default function Header({ onOpenCart }) {
   const { user, isLogged, isAdmin, logout } = useAuth();
+  const { toast } = useToast();
   const { totalItens } = useCart();
   const [menu, setMenu] = useState(false);
   const navigate = useNavigate();
@@ -12,6 +14,7 @@ export default function Header({ onOpenCart }) {
   const sair = () => {
     logout();
     setMenu(false);
+    toast('Logout realizado com sucesso.', 'success');
     navigate('/');
   };
 
