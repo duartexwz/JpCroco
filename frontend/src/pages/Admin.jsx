@@ -277,15 +277,15 @@ export default function Admin() {
                 </div>
                 <div className="search-row"><input value={buscaProd} onChange={(e) => setBuscaProd(e.target.value)} placeholder="Buscar produto..." /></div>
                 <div style={{ overflowX: 'auto' }}>
-                  <table className="tbl"><thead><tr><th></th><th>Nome</th><th>Cor</th><th>Preço</th><th>Tamanhos</th><th>Estoque</th><th></th></tr></thead>
+                  <table className="tbl tbl-produtos"><thead><tr><th></th><th>Nome</th><th>Cor</th><th>Preço</th><th>Tamanhos</th><th>Estoque</th><th></th></tr></thead>
                     <tbody>{prodsFiltrados.map((p) => (
-                      <tr key={p.id}>
-                        <td>{p.imagem ? <SafeImg className="tbl-img" src={p.imagem} alt="" /> : '🐊'}</td>
-                        <td><b>{p.nome}</b></td>
-                        <td>{p.cor || '—'}</td>
-                        <td>{p.preco_promocional ? <>{api.formatarMoeda(p.preco_promocional)} <s style={{ color: 'var(--cinza-400)', fontSize: '.75rem' }}>{api.formatarMoeda(p.preco)}</s></> : api.formatarMoeda(p.preco)}</td>
-                        <td>{p.tamanhos?.map((t) => t.tamanho).join(', ') || p.tamanho || '—'}</td>
-                        <td>{p.stock}</td>
+                      <tr key={p.id} className="prod-row">
+                        <td data-label="Foto" className="prod-foto">{p.imagem ? <SafeImg className="tbl-img" src={p.imagem} alt="" /> : '🐊'}</td>
+                        <td data-label="Produto"><b>{p.nome}</b><br /><small style={{ color: 'var(--cinza-500)' }}>{p.categoria || '—'}</small></td>
+                        <td data-label="Cor">{p.cor || '—'}</td>
+                        <td data-label="Preço">{p.preco_promocional ? <>{api.formatarMoeda(p.preco_promocional)} <s style={{ color: 'var(--cinza-400)', fontSize: '.75rem' }}>{api.formatarMoeda(p.preco)}</s></> : api.formatarMoeda(p.preco)}</td>
+                        <td data-label="Tamanhos">{p.tamanhos?.map((t) => t.tamanho).join(', ') || p.tamanho || '—'}</td>
+                        <td data-label="Estoque">{p.stock}</td>
                         <td><div className="row-actions">
                           <button className="mini-btn" onClick={() => setModal({ tipo: 'produto', dados: p })}>Editar</button>
                           <button className="mini-btn danger" onClick={() => setModal({
@@ -448,7 +448,28 @@ function PedidoModal({ pedido, onClose, onSave }) {
   const [status, setStatus] = useState(pedido.status);
   const [rastreio, setRastreio] = useState(pedido.codigo_rastreio || '');
   const [transportadora, setTransportadora] = useState(pedido.transportadora || 'Correios');
+  const [servicoME, setServicoME] = useState('1');
+  const [gerando, setGerando] = useState(false);
+  const [etiqueta, setEtiqueta] = useState(null);
+  const { toast } = useToast();
   const isLocal = pedido.entrega_tipo?.includes('Retirada') || pedido.entrega_tipo?.includes('Uber');
+  const pago = ['pago', 'aprovado', 'approved'].includes(String(pedido.status || '').toLowerCase());
+
+  const gerarEtiqueta = async () => {
+    setGerando(true);
+    setEtiqueta(null);
+    try {
+      const r = await api.gerarEtiqueta(pedido.id, Number(servicoME));
+      setEtiqueta(r);
+      setRastreio(r.tracking || '');
+      setStatus('Enviado');
+      toast('Etiqueta gerada! Cliente notificado.', 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setGerando(false);
+    }
+  };
 
   return (
     <div className="modal-overlay show" onClick={onClose}>
@@ -479,6 +500,32 @@ function PedidoModal({ pedido, onClose, onSave }) {
                   <option>Correios</option><option>Jadlog</option><option>Outra</option>
                 </select>
               </div>
+              {pago && !pedido.codigo_rastreio && (
+                <div className="form-group" style={{ background: 'var(--fundo)', border: '1px solid var(--cinza-200)', borderRadius: 10, padding: 12 }}>
+                  <label className="form-label">Etiqueta Melhor Envio (cobra a carteira!)</label>
+                  <div className="form-row">
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <select value={servicoME} onChange={(e) => setServicoME(e.target.value)}>
+                        <option value="1">PAC</option>
+                        <option value="2">SEDEX</option>
+                        <option value="3">Jadlog Package</option>
+                        <option value="4">Jadlog Com</option>
+                      </select>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0, maxWidth: 170 }}>
+                      <button type="button" className="btn btn-primary btn-sm" style={{ width: '100%' }} disabled={gerando} onClick={gerarEtiqueta}>
+                        {gerando ? 'Gerando…' : 'Gerar etiqueta'}
+                      </button>
+                    </div>
+                  </div>
+                  {etiqueta && (
+                    <p className="form-hint" style={{ marginTop: 8 }}>
+                      Rastreio <b>{etiqueta.tracking}</b>
+                      {etiqueta.label_url && <> • <a href={etiqueta.label_url} target="_blank" rel="noreferrer">Imprimir etiqueta</a></>}
+                    </p>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -502,8 +549,13 @@ function ProdutoModal({ produto, onClose, onSave }) {
     produto?.tamanhos?.length ? produto.tamanhos.map((t) => ({ tamanho: t.tamanho, stock: t.stock, cor: t.cor || '' })) : [{ tamanho: 'M', stock: 10, cor: '' }],
   );
   const [cor, setCor] = useState(produto?.cor || '');
-  const [imagens, setImagens] = useState(
-    produto?.imagens?.length ? [...produto.imagens] : (produto?.imagem ? [produto.imagem] : []),
+  const [categoria, setCategoria] = useState(produto?.categoria || 'Outros');
+  const [fotos, setFotos] = useState(
+    produto?.fotos?.length
+      ? produto.fotos.map((f) => ({ url: f.url, cor: f.cor || '' }))
+      : (produto?.imagens?.length
+        ? produto.imagens.map((u) => ({ url: u, cor: '' }))
+        : (produto?.imagem ? [{ url: produto.imagem, cor: '' }] : [])),
   );
   const [urlAvulsa, setUrlAvulsa] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -511,6 +563,7 @@ function ProdutoModal({ produto, onClose, onSave }) {
   const { toast } = useToast();
 
   const TAMANHOS = ['P', 'M', 'G', 'GG', 'XG', 'Único'];
+  const CATEGORIAS = ['Bonés', 'Bermudas', 'Camisas', 'Moletons', 'Calças', 'Conjuntos', 'Acessórios', 'Outros'];
 
   const enviarArquivos = async (fileList) => {
     const arqs = [...(fileList || [])];
@@ -520,7 +573,7 @@ function ProdutoModal({ produto, onClose, onSave }) {
       const r = await api.uploadImagens(arqs);
       const novas = r.urls || (r.url ? [r.url] : []);
       if (!novas.length) throw new Error('Upload sem retorno.');
-      setImagens((atuais) => [...atuais, ...novas]);
+      setFotos((atuais) => [...atuais, ...novas.map((u) => ({ url: u, cor: '' }))]);
       toast(`${novas.length} imagem(ns) enviada(s).`, 'success');
     } catch (e) {
       toast(e.message, 'error');
@@ -532,7 +585,7 @@ function ProdutoModal({ produto, onClose, onSave }) {
   const adicionarUrl = () => {
     const u = urlAvulsa.trim();
     if (!u) return;
-    setImagens((atuais) => [...atuais, u]);
+    setFotos((atuais) => [...atuais, { url: u, cor: '' }]);
     setUrlAvulsa('');
   };
 
@@ -541,11 +594,13 @@ function ProdutoModal({ produto, onClose, onSave }) {
     if (!tams.length || tams.some((t) => !t.tamanho)) return toast('Informe ao menos um tamanho.', 'error');
     setSaving(true);
     try {
+      const fotosFinais = fotos.map((f) => ({ url: f.url, cor: f.cor?.trim() || null }));
       await onSave(produto?.id, {
         nome: nome.trim(), preco: Number(preco),
         preco_promocional: promo === '' ? null : Number(promo),
         cor: cor.trim() || null,
-        imagem: imagens[0] || null, imagens,
+        categoria,
+        imagem: fotosFinais[0]?.url || null, imagens: fotosFinais.map((f) => f.url), fotos: fotosFinais,
         tamanhos: tams.map((t) => ({ tamanho: t.tamanho, stock: Number(t.stock) || 0, cor: t.cor?.trim() || null })),
       });
     } finally {
@@ -563,7 +618,14 @@ function ProdutoModal({ produto, onClose, onSave }) {
             <div className="form-group"><label className="form-label">Preço *</label><input type="number" step="0.01" value={preco} onChange={(e) => setPreco(e.target.value)} /></div>
             <div className="form-group"><label className="form-label">Promo (opcional)</label><input type="number" step="0.01" value={promo} onChange={(e) => setPromo(e.target.value)} /></div>
           </div>
-          <div className="form-group"><label className="form-label">Cor (opcional)</label><input value={cor} onChange={(e) => setCor(e.target.value)} placeholder="Ex: Verde, Preto, Branco" maxLength={30} /></div>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label">Cor (opcional)</label><input value={cor} onChange={(e) => setCor(e.target.value)} placeholder="Ex: Verde, Preto, Branco" maxLength={30} /></div>
+            <div className="form-group"><label className="form-label">Categoria *</label>
+              <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+                {CATEGORIAS.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
           <div className="form-group"><label className="form-label">Tamanhos e estoque * (opcional: cor de cada tamanho)</label>
             {tams.map((t, i) => (
               <div className="tam-row" key={i}>
@@ -578,15 +640,17 @@ function ProdutoModal({ produto, onClose, onSave }) {
             ))}
             <button className="mini-btn" onClick={() => setTams([...tams, { tamanho: 'M', stock: 10, cor: '' }])}>+ Tamanho</button>
           </div>
-          <div className="form-group"><label className="form-label">Imagens (a primeira é a capa)</label>
-            {imagens.length > 0 && (
+          <div className="form-group"><label className="form-label">Imagens (a primeira é a capa; informe a cor de cada foto)</label>
+            {fotos.length > 0 && (
               <div className="admin-thumbs">
-                {imagens.map((u, i) => (
-                  <div className="admin-thumb" key={`${i}-${u}`}>
-                    <img src={u} alt="" onError={(e) => { e.currentTarget.style.opacity = '.25'; }} />
+                {fotos.map((f, i) => (
+                  <div className="admin-thumb" key={`${i}-${f.url}`}>
+                    <img src={f.url} alt="" onError={(e) => { e.currentTarget.style.opacity = '.25'; }} />
                     {i === 0 && <span className="admin-thumb-capa">Capa</span>}
                     <button type="button" className="admin-thumb-x" title="Remover"
-                      onClick={() => setImagens(imagens.filter((_, j) => j !== i))}>✕</button>
+                      onClick={() => setFotos(fotos.filter((_, j) => j !== i))}>✕</button>
+                    <input value={f.cor || ''} maxLength={30} placeholder="Cor" title="Cor desta foto (mostrada ao escolher a cor)"
+                      onChange={(e) => setFotos(fotos.map((x, j) => j === i ? { ...x, cor: e.target.value } : x))} />
                   </div>
                 ))}
               </div>

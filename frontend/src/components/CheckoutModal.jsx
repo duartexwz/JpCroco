@@ -24,6 +24,7 @@ export default function CheckoutModal({ open, onClose, onPaid }) {
   const [rua, setRua] = useState('');
   const [numero, setNumero] = useState('');
   const [complemento, setComplemento] = useState('');
+  const [bairro, setBairro] = useState('');
   const [cidade, setCidade] = useState('');
   const [estado, setEstado] = useState('');
   const [cep, setCep] = useState('');
@@ -66,6 +67,7 @@ export default function CheckoutModal({ open, onClose, onPaid }) {
     try {
       const end = await api.consultarCep(d);
       if (end.rua) setRua(end.rua);
+      if (end.bairro) setBairro(end.bairro);
       if (end.cidade) setCidade(end.cidade);
       if (end.estado) setEstado(end.estado);
       toast('Endereço preenchido pelo CEP.', 'success');
@@ -138,7 +140,7 @@ export default function CheckoutModal({ open, onClose, onPaid }) {
     }
     setEnviando(true);
     try {
-      const endereco = `${rua.trim()}, ${numero.trim()}${complemento.trim() ? ` - ${complemento.trim()}` : ''}, ${cidade.trim()} - ${estado}, CEP: ${maskCep(cep)}`;
+      const endereco = `${rua.trim()}, ${numero.trim()}${complemento.trim() ? ` - ${complemento.trim()}` : ''}${bairro.trim() ? `, ${bairro.trim()}` : ''}, ${cidade.trim()} - ${estado}, CEP: ${maskCep(cep)}`;
       const pedido = await api.createPedido({
         cliente_id: cliente.id,
         status: 'pendente',
@@ -223,6 +225,12 @@ export default function CheckoutModal({ open, onClose, onPaid }) {
                 <label className="form-label">Complemento</label>
                 <input value={complemento} onChange={(e) => setComplemento(e.target.value)} placeholder="Apto, Bloco..." />
               </div>
+              <div className="form-group">
+                <label className="form-label">Bairro</label>
+                <input value={bairro} onChange={(e) => setBairro(e.target.value)} placeholder="Seu bairro" />
+              </div>
+            </div>
+            <div className="form-row">
               <div className={`form-group${erros.estado ? ' invalid' : ''}`}>
                 <label className="form-label">Estado *</label>
                 <select value={estado} onChange={(e) => setEstado(e.target.value)}>

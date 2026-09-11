@@ -19,7 +19,17 @@ function traduzirRecusa(detail) {
   return mapa[detail] || `Pagamento recusado${detail ? ` (${detail})` : ''}. Tente outro cartão ou o Pix.`;
 }
 
+function desmontarBrick(ctrl) {
+  // unmount() do Brick pode retornar undefined (não é promise): nunca
+  // encadear .catch direto — o TypeError derrubava o React (tela branca).
+  try {
+    const r = ctrl?.unmount?.();
+    if (r && typeof r.catch === 'function') r.catch(() => {});
+  } catch { /* ignore */ }
+}
+
 function loadMpSdk() {
+
   if (window.MercadoPago) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
@@ -104,7 +114,7 @@ export default function PaymentModal({ order, onClose, onSuccess }) {
         if (cancelado) return;
         const mp = new window.MercadoPago(pk, { locale: 'pt-BR' });
         if (brickCtrl.current) {
-          try { await brickCtrl.current.unmount(); } catch { /* ignore */ }
+          desmontarBrick(brickCtrl.current);
           brickCtrl.current = null;
         }
         setEstado('form');
@@ -162,7 +172,7 @@ export default function PaymentModal({ order, onClose, onSuccess }) {
     return () => {
       cancelado = true;
       if (brickCtrl.current) {
-        brickCtrl.current.unmount().catch(() => {});
+        desmontarBrick(brickCtrl.current);
         brickCtrl.current = null;
       }
     };

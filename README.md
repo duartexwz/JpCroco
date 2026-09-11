@@ -1,266 +1,331 @@
 # 🐊 JP Croco — Loja Online
 
-Loja virtual completa de moda (tema Lacoste) com vitrine, sacola, checkout com cálculo de frete,
-pagamento via **Mercado Pago (Brick)**, rastreio de entrega, área do cliente e painel administrativo
-com **notificação no aparelho do admin** a cada mudança de status do pedido.
+Loja virtual completa de moda com vitrine, sacola por usuário, checkout com frete real,
+pagamento **Mercado Pago (Pix com confirmação automática)**, rastreio, área do cliente e
+painel admin com **push no aparelho**, etiqueta de envio e pop-up do pedido mais recente.
+
+> **Produção:** https://jpcroco.vercel.app (frontend + backend no mesmo domínio)
 
 ## Índice
 
 1. [Visão geral](#1-visão-geral)
-2. [Arquitetura e portas](#2-arquitetura-e-portas)
+2. [Arquitetura](#2-arquitetura)
 3. [Stack](#3-stack)
 4. [Funcionalidades](#4-funcionalidades)
 5. [Fluxo do pedido (compra → entrega)](#5-fluxo-do-pedido-compra--entrega)
 6. [Rotas do frontend](#6-rotas-do-frontend)
 7. [Endpoints do backend](#7-endpoints-do-backend)
 8. [Variáveis de ambiente](#8-variáveis-de-ambiente)
-9. [Como rodar com Docker](#9-como-rodar-com-docker)
-10. [Como rodar local (dev)](#10-como-rodar-local-dev)
+9. [Como rodar com Docker (dev local)](#9-como-rodar-com-docker-dev-local)
+10. [Como rodar local sem Docker](#10-como-rodar-local-sem-docker)
 11. [Banco de dados e migrações](#11-banco-de-dados-e-migrações)
 12. [Estrutura de pastas](#12-estrutura-de-pastas)
-13. [Troubleshooting](#13-troubleshooting)
+13. [Roadmap: refatoração e organização](#13-roadmap-refatoração-e-organização)
+14. [Troubleshooting](#14-troubleshooting)
+15. [Antes de deixar o repo público](#15-antes-de-deixar-o-repo-público)
 
 ---
 
 ## 1. Visão geral
 
-- **Frontend:** React 18 + Vite + React Router (SPA), tema verde Lacoste com dourado, 100% responsivo
-  (desktop, tablet e mobile). Servido pelo Nginx, que também faz proxy de `/api/` e `/uploads/`
-  para o backend.
-- **Backend:** FastAPI (Python 3.13) com PostgreSQL (asyncpg), JWT (Argon2), upload de imagens,
-  integração Mercado Pago, Correios (CWS), ViaCEP, e-mail (SMTP) e Web Push (VAPID).
-- **Pagamento:** nunca toca no cartão — usa o **Payment Brick** do Mercado Pago (cartão, débito,
-  boleto e **Pix com QR Code**) + webhook que confirma o pedido e dá baixa no estoque.
-- **Entrega:** cálculo de frete por CEP (PAC/SEDEX via Correios ou simulação quando sem credencial;
-  Retirada/Uber no DF e Entorno), endereço com autofill ViaCEP, código de rastreio lançado pelo
-  admin com timeline em tempo real para o cliente.
-- **Privacidade:** ao cliente **nunca é exibido o `#id` interno** do pedido — só o protocolo
-  público (`id_pedido`); quando ainda não há protocolo, a UI mostra "Pedido em processamento".
+- **Frontend:** React 18 + Vite + React Router em modo **Hash** (`/#/loja` — funciona com F5 em
+  qualquer hospedagem estática, sem depender de rewrites do servidor). Tema verde Lacoste com
+  dourado, responsivo (desktop/tablet/mobile). Code-split por rota + `SafeImg` (fallback 🐊
+  quando a foto quebra).
+- **Backend:** FastAPI (Python 3.13) + PostgreSQL **Neon** (asyncpg, **1 conexão dedicada por
+  requisição** — sem pool compartilhado, à prova de troca de event loop no serverless),
+  JWT com **renovação silenciosa** (grace de 7 dias), Argon2, Mercado Pago, frete
+  **SuperFrete** (Melhor Envio de fallback), ViaCEP, SMTP e Web Push (VAPID).
+- **Imagens:** upload múltiplo direto para o **Vercel Blob** (store **público**); stores privados
+  retornam 403 no `<img>` — ver Troubleshooting.
+- **Pagamento:** Payment Brick do Mercado Pago (cartão, débito, boleto e **Pix com QR Code**).
+  Pix **in_process/pending** é confirmado por **polling** (`GET /payments/status/{id}`, 5s por
+  até 10 min) além do webhook — aprovar no banco vira `Pago` em segundos, mesmo se o webhook
+  falhar. Webhook com validação HMAC confirma com o site fechado e dá baixa no estoque.
+- **Entrega:** cálculo por CEP (SuperFrete → PAC/SEDEX/Jadlog; Retirada/Uber no DF e Entorno),
+  endereço com bairro + autofill ViaCEP, **etiqueta comprada no painel admin** (Melhor Envio,
+  debita a carteira), rastreio lançado automaticamente com aviso ao cliente.
+- **Privacidade:** ao cliente **nunca é exibido o `#id` interno** — só o protocolo público
+  (`id_pedido`); sem protocolo, a UI mostra "Pedido em processamento".
 
-## 2. Arquitetura e portas
+## 2. Arquitetura
+
+```
+Navegador ──► Vercel (jpcroco.vercel.app, região gru1)
+                 ├── /api/* ──► FastAPI serverless (backend/, entrypoint api.app:app)
+                 └── /* ──────► Frontend estático (frontend/dist, HashRouter)
+FastAPI ──► Neon Postgres (pooler pgbouncer p/ API; direto p/ DDL)
+FastAPI ──► Mercado Pago, SuperFrete/Melhor Envio, Vercel Blob, ViaCEP, SMTP, Push (VAPID)
+```
+
+Desenvolvimento local alternativo com Docker (ver seção 9):
 
 ```
 Navegador ──► Nginx (frontend :8070)
-                 ├── /  ──────────────► React build (dist/index.html, SPA)
-                 ├── /api/* ──proxy───► FastAPI (backend :8055, strip do /api)
-                 └── /uploads/* ─proxy► FastAPI (imagens dos produtos)
+                ├── / ───────────► React build (SPA)
+                ├── /api/* ─proxy► FastAPI (:8055, com strip do /api via middleware)
+                └── /uploads/* ───► (legado local; produção usa Blob)
 FastAPI ──► PostgreSQL :5433 (host) / 5432 (container)
-FastAPI ──► Mercado Pago, Correios CWS, ViaCEP, SMTP, Push (VAPID)
 ```
 
-| Serviço  | Container        | Porta host | Porta interna |
-|----------|------------------|------------|---------------|
-| Frontend | `frontend`       | 8070       | 8070          |
-| Backend  | (compose `backend`) | 8055    | 8055          |
-| Banco    | `loja_online_db` | 5433       | 5432          |
-
-> O backend **sempre** recebe as rotas sem o prefixo `/api` (o Nginx remove). Todos os routers
-> seguem esse padrão — inclusive `/payments/*` (ver [Troubleshooting](#13-troubleshooting)).
+> O backend aceita as rotas **com ou sem** o prefixo `/api` (middleware `strip_api_prefix`):
+> no Docker o Nginx remove; na Vercel o rewrite encaminha o caminho cheio.
 
 ## 3. Stack
 
 | Camada    | Tecnologias |
 |-----------|-------------|
-| Frontend  | React 18, React Router 6, Vite 5, CSS próprio (tema Lacoste), Mercado Pago JS SDK v2 (Brick) |
+| Frontend  | React 18, React Router 6 (hash), Vite 5, CSS próprio, MP JS SDK v2 (Brick) |
 | Backend   | FastAPI, asyncpg, PyJWT, pwdlib (Argon2), mercadopago SDK, pywebpush, httpx, fastapi-mail |
-| Banco     | PostgreSQL 16 |
-| Infra     | Docker + Compose, Nginx (SPA + proxy), Gunicorn/Uvicorn (alternativo) |
+| Banco     | PostgreSQL 16 (Neon; Docker local opcional) |
+| Infra     | Vercel (services frontend+backend, `vercel.json`), Docker + Compose (dev), Nginx (dev) |
 
 ## 4. Funcionalidades
 
 ### Vitrine e sacola
-- Home com hero, destaques, história da marca e CTA; Loja com **filtros por tamanho + busca**.
-- Cards com foto, promo (preço riscado), estoque e tag Esgotado/Promo; modal de detalhe com
-  galeria, escolha de tamanho e quantidade.
-- Sacola lateral (drawer) persistida por aba (`sessionStorage`), controle de quantidade
-  respeitando o estoque por tamanho.
+- Home com hero (foto da marca), destaques, história e CTA; Loja com **filtros por tamanho + busca**.
+- Cards com foto, promo, estoque e tags; modal de detalhe com **foto inteira sem corte**, galeria,
+  escolha de **cor → tamanhos da cor** e quantidade.
+- **Sacola por usuário logado** (`carrinho:<username>`): trocar de conta não mistura sacolas; ao
+  logar, o que estava na sacola anônima é mesclado. Logout nunca apaga a sacola de outra conta.
+
+### Produtos (modelagem)
+- `produtos`: nome, preço/promo, `cor` (principal), imagem de capa + `produto_imagens[]`.
+- **Variantes cor × tamanho** em `produto_tamanhos` (`tamanho`, `stock`, `preco`, `cor`):
+  ex. Verde/P, Verde/M, Preto/M. UNIQUE em `(produto_id, tamanho, cor)` + validação 400.
+- Admin: múltiplas imagens (upload em lote p/ Blob, capa = primeira), cor por linha de tamanho,
+  `Único` como opção de tamanho.
 
 ### Conta e login
-- Cadastro/login com e-mail + senha (JWT por aba — permite 2 contas em 2 abas), "esqueci senha"
-  com link por e-mail (`/redefinir-senha?token=...`), Minha Conta com dados pessoais
-  (nome, e-mail, telefone, CPF) **obrigatórios para comprar** — o checkout reaproveita esses dados.
+- Cadastro/login com e-mail + senha; "esqueci senha" com link por e-mail.
+- Sessão com **refresh silencioso**: 401 renova o token (janela de 7 dias) e repete a chamada —
+  só desloga após 7 dias sem uso. Minha Conta exige dados completos para comprar.
 
-### Checkout e frete (entrega)
-- Endereço com **máscara de CEP + autofill ViaCEP** (rua/cidade/UF).
-- **Cálculo de frete por CEP** considerando peso real, peso cubado e dimensões do carrinho:
-  - DF e Entorno (CEPs 70/71/72/73): **Retirada no local (grátis)** ou **Uber Delivery (a combinar)**;
-  - Resto do Brasil: **PAC e SEDEX** (valores/prazos reais via Correios CWS ou simulação
-    quando `CORREIOS_USER/SENHA` não configurados — indicado na tela como "simulação").
-- O pedido grava `valor_total`, `valor_frete`, `subtotal`, `cep_destino` e `entrega_tipo`.
+### Checkout e frete
+- Endereço com máscara de CEP + autofill ViaCEP (**com bairro**), formato versionado
+  (`..., Bairro, Cidade - UF, CEP:`) lido pelo gerador de etiqueta.
+- **Cálculo por CEP** (peso real + cubado + dimensões): DF/Entorno → Retirada/Uber;
+  resto do Brasil → **SuperFrete** (fallback Melhor Envio). Sem provedor → 502 explícito
+  (sem chute de preço).
+- O pedido grava `valor_total`, `valor_frete`, `subtotal`, `cep_destino`, `entrega_tipo`.
 
 ### Pagamento (Mercado Pago)
-- Modal segura com **Payment Brick**: cartão de crédito/débito, boleto e **Pix com QR Code
-  + copia-e-cola**.
-- Processamento em `POST /payments/process` com `X-Idempotency-Key` (sem dupla cobrança);
-  aprovado → pedido vira `Pago` + **baixa automática no estoque** (produto e tamanho);
-  em análise → aviso; recusado → motivo traduzido (ex.: "Saldo ou limite insuficiente").
-- **Webhook** (`POST /webhook/mercadopago`, com validação HMAC) confirma o pagamento mesmo com
-  o site fechado e notifica o admin.
+- Modal com Brick + **Pix com QR + polling automático** e botão *"Já paguei — verificar agora"*.
+- `POST /payments/process` idempotente; aprovado → `Pago` + baixa de estoque + **push ao admin**.
+- `GET /payments/status/{payment_id}` confirma via consulta oficial (cobre falha de webhook).
+- Webhook HMAC → mesmo efeito com o site fechado. Recusas traduzidas para o cliente.
 
 ### Minhas Compras (cliente)
-- Lista com filtro por status, itens com foto, subtotal/frete/total, endereço e CEP.
-- **Rastreio em tempo real**: stepper Postado → Em Trânsito → Saiu p/ Entrega → Entregue +
-  timeline de eventos (Correios, com fallback para o status local).
-- Entrega local: botão WhatsApp contextual (solicitar endereço da loja / chamar vendedor).
+- Filtro por status, itens com foto **e cor/tamanho**, frete/total, endereço e CEP.
+- **Rastreio em tempo real** (stepper + timeline, com fallback local) + WhatsApp contextual.
 
 ### Painel Admin
-- Dashboard (totais + receita + recentes), CRUD de **produtos** (preço/promo, tamanhos+estoque,
-  upload de imagens com capa), **pedidos** (abas por status, busca, exclusão),
-  usuários/clientes/admins.
-- **Gerenciar entrega**: alterar status, lançar **código de rastreio + transportadora**
-  (vira `Enviado` e **notifica o cliente** por e-mail/WhatsApp); validação de rastreio
-  (mín. 8 chars) e de fluxo (só marca `Entregue` após envio/pagamento).
-- **🔔 Notificação no aparelho do admin logado**: a cada mudança de status do pedido o admin
-  recebe **toast no painel + notificação do sistema no aparelho** (som, vibração, título
-  piscando). Com Handlers: Service Worker (`/sw.js`) + inscrição Web Push (`/push/subscribe`,
-  exige login admin) → chega **mesmo com o site fechado** (requer HTTPS e chaves VAPID).
-  Barra no topo do painel mostra o estado e permite Ativar/Pausar. Polling de 15s cobre a
-  página aberta; o push do backend cobre os demais aparelhos/sessões.
+- Dashboard, CRUD de produtos, pedidos (abas/busca/exclusão), usuários/clientes/admins.
+- **Gerenciar entrega**: status, rastreio manual + transportadora, ou **etiqueta Melhor Envio**
+  (PAC/SEDEX/Jadlog — cobra a carteira, salva o rastreio, marca `Enviado`, imprime e avisa).
+- **Pop-up do pedido mais recente** ao entrar (1x por sessão, com som) + botão de gerenciar.
+- Confirmações de exclusão em modal estilizada (sem `confirm()` nativo).
+- **🔔 Aparelho do admin**: toast + notificação do sistema (som, vibração, título piscando) a
+  cada evento; push VAPID chega **com o site fechado** (HTTPS + permissão + *Ativar aparelho*).
 
 ## 5. Fluxo do pedido (compra → entrega)
 
-1. Cliente monta a sacola → **Finalizar Compra** (exige login + dados pessoais completos).
-2. Informa CEP → endereço preenche via ViaCEP → **calcula frete** → escolhe a entrega.
-3. **Confirmar** cria o pedido `pendente` + itens (protocolo oculto até o pagamento).
-4. Modal de pagamento (Brick) → Pix/cartão/boleto → aprovado: pedido `Pago` + baixa de estoque.
-5. Admin vê a venda (painel + aparelho) → separa → lança **código de rastreio** → `Enviado`
-   (cliente notificado) → cliente acompanha a timeline → admin marca `Entregue`.
+1. Sacola → **Finalizar Compra** (login + dados completos) → CEP → frete → entrega.
+2. **Confirmar** cria o pedido `pendente` + itens (com `tamanho` e `cor`).
+3. Pagamento (Brick/Pix) → polling confirma → `Pago` + baixa de estoque + push ao admin.
+4. Admin gera a **etiqueta** (ou lança rastreio manual) → `Enviado` (cliente avisado).
+5. Cliente acompanha a timeline → admin marca `Entregue`.
 
-Status possíveis: `pendente` → `Pago` → `Enviado` → `Entregue` (ou `Recusado`/`Cancelado`).
+Status: `pendente` → `Pago` → `Enviado` → `Entregue` (ou `Recusado`/`Cancelado`).
 
 ## 6. Rotas do frontend
 
+HashRouter — tudo após `/#/` (F5 sempre volta 200):
+
 | Rota | Acesso | Descrição |
 |------|--------|-----------|
-| `/` | público | Home (retorno do MP: `?collection_status=`/`status=` mostra toast) |
-| `/loja` | público | Vitrine completa com filtros e busca |
+| `/` | público | Home (retorno do MP via query mostra toast) |
+| `/loja` | público | Vitrine com filtros e busca |
 | `/login` | público | Entrar / criar conta / esqueci senha |
-| `/redefinir-senha?token=` | público | Definir nova senha |
+| `/redefinir-senha?token=` | público | Nova senha |
 | `/conta` | logado | Dados pessoais e segurança |
 | `/minhas-compras` | logado | Pedidos, frete, rastreio, WhatsApp |
-| `/admin` | admin | Painel completo + notificações do aparelho |
+| `/admin` | admin | Painel + pop-up do último pedido + aparelho |
 | `/politica-privacidade` | público | LGPD |
 
 ## 7. Endpoints do backend
 
-Base: `/api/` no navegador (sem `/api` dentro do container).
+Base `/api/` (o backend aceita com ou sem o prefixo).
 
 | Método | Endpoint | Auth | Descrição |
 |--------|----------|------|-----------|
-| POST | `/login/` | — | Login (form `username`+`password` → JWT) |
-| POST | `/login/esqueci-senha` | — | Envia link de reset |
-| POST | `/login/redefinir-senha` | — | Troca a senha com token |
-| GET | `/produtos/` | — | Lista (filtros: nome, preço, tamanho, estoque) |
-| POST/PATCH/DELETE | `/produtos/` | admin | CRUD de produtos (+tamanhos/imagens) |
-| GET/POST/PATCH | `/clientes/` | logado | Dados do cliente (checkout/conta) |
+| POST | `/login/` | — | Login (form → JWT) |
+| POST | `/login/refresh` | — | Renova token expirado (janela 7 dias) |
+| POST | `/login/esqueci-senha` | — | Link de reset |
+| POST | `/login/redefinir-senha` | — | Troca a senha |
+| GET | `/produtos/` | — | Lista em lote (tamanhos/imagens, filtros) |
+| POST/PATCH/DELETE | `/produtos/` | admin | CRUD (+variantes, valida repetido) |
+| GET/POST/PATCH | `/clientes/` | logado | Dados do cliente |
 | POST | `/pedidos/` | logado | Cria pedido (protocolo oculto se pendente) |
 | GET | `/pedidos/meus` | logado | Pedidos do e-mail logado |
 | GET | `/pedidos/` | logado | Lista/filtra (admin vê todos) |
-| PATCH | `/pedidos/{id_pedido}` | logado | Atualiza status/rastreio/frete (**dispara push ao admin**) |
-| POST | `/itens_pedido/` | logado | Adiciona item (com `tamanho`) |
-| POST | `/frete/calcular` | — | `{cepDestino, itens}` → `opcoes[]` normalizadas |
-| GET | `/endereco/cep/{cep}` | — | ViaCEP normalizado (rua/bairro/cidade/estado) |
-| GET | `/rastreio/{codigo}` | — | Correios (Link/Proxy) + fallback local com steps |
+| PATCH | `/pedidos/{id_pedido}` | logado | Status/rastreio (**push ao admin**) |
+| POST | `/itens_pedido/` | logado | Item (com `tamanho` e `cor`) |
+| POST | `/frete/calcular` | — | `{cepDestino, itens}` → `opcoes[]` (SuperFrete→ME) |
+| POST | `/frete/etiqueta/{id}` | admin | Compra etiqueta ME (**cobra carteira**), rastreio+`Enviado` |
+| GET | `/frete/oauth/url` | admin | URL de autorização OAuth do ME |
+| GET | `/frete/oauth/callback` | — | Troca `code` por tokens (salva no banco) |
+| POST | `/frete/melhorenvio-webhook` | ME | Eventos de tracking (log) |
+| GET | `/endereco/cep/{cep}` | — | ViaCEP normalizado |
+| GET | `/rastreio/{codigo}` | — | Tracking + fallback local com steps |
 | GET | `/webhook/public-key` | — | Public Key do MP (Brick) |
-| POST | `/payments/process` | logado | Processa Brick (idempotente) |
-| POST | `/webhook/mercadopago` | MP | Webhook (HMAC) → `Pago` + estoque + push |
+| POST | `/payments/process` | logado | Brick idempotente |
+| GET | `/payments/status/{id}` | logado | Consulta oficial (polling do Pix) |
+| POST | `/webhook/mercadopago` | MP | Webhook HMAC → `Pago` + estoque + push |
 | GET | `/push/vapid-key` | — | Chave VAPID pública |
-| POST/POST | `/push/subscribe`, `/push/unsubscribe` | admin | Inscrição do aparelho |
-| POST | `/upload/imagem` | admin | Upload (JPG/PNG/WebP ≤ 5 MB) |
+| POST | `/push/subscribe`, `/push/unsubscribe` | admin | Aparelho |
+| POST | `/upload/imagem` | admin | 1–8 imagens p/ Blob (502 com motivo se falhar) |
 | GET | `/health` | — | Health check |
 
 ## 8. Variáveis de ambiente
 
-### Backend (`backend/.env` — ver `.env.example`)
-Obrigatórias: `DATABASE_URL`, `SECRET_KEY` (64+ chars), `ALGORITHM`, `MERCADOPAGO_ACCESS_TOKEN`,
-`MERCADOPAGO_WEBHOOK_SECRET`, `FRONTEND_URL` (HTTPS em produção, sem path), `CORS_ORIGINS`.
-Pagamento: `MERCADOPAGO_PUBLIC_KEY` (`TEST-`/`APP_USR-`), `WEBHOOK_URL` (ex.: ngrok `.../api/webhook/mercadopago`).
-Entrega: `CORREIOS_USER`, `CORREIOS_SENHA`, `CORREIOS_CEP_ORIGEM` (sem credencial → simulação avisada na tela).
-Notificações: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `VENDEDOR_WHATSAPP`.
-E-mail: `SMTP_HOST/PORT/USER/PASS/FROM` (Gmail usa senha de app).
+`.env` raiz (Docker) **e** dashboard da Vercel (produção — redeploy após mudar).
 
-### Frontend (`frontend/.env` — ver `.env.example`)
-`VITE_API_URL` (`/api` no Docker; URL do backend em dev), `VITE_VENDEDOR_WHATSAPP`.
+| Grupo | Variáveis |
+|-------|-----------|
+| Banco | `DATABASE_URL` (pooler p/ API), `DATABASE_URL_UNPOOLED` (DDL) |
+| Auth | `SECRET_KEY` (64+ chars), `ALGORITHM=HS256`, `ACCESS_TOKEN_EXPIRE_MINUTES=30` |
+| Pagamento | `MERCADOPAGO_ACCESS_TOKEN` (`APP_USR-`), `MERCADOPAGO_PUBLIC_KEY`, `MERCADOPAGO_WEBHOOK_SECRET`, `WEBHOOK_URL=https://SEU_DOMINIO/api/webhook/mercadopago`, `FRONTEND_URL` (HTTPS, sem path) |
+| Frete | `SUPERFRETE_TOKEN/API_URL/EMAIL/SERVICES`, `MELHORENVIO_TOKEN/CLIENT_ID/CLIENT_SECRET/REDIRECT_URI/API_URL/EMAIL/SERVICES`, `MELHORENVIO_FROM_*` (remetente, 11 vars), `CEP_ORIGEM` |
+| Upload | `BLOB_READ_WRITE_TOKEN` (**store PÚBLICO** do Vercel Blob) |
+| Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
+| E-mail | `SMTP_HOST/PORT/USER/PASS/FROM` (Gmail: senha de app) |
+| Diversos | `CORS_ORIGINS`, `WHATSAPP_API_URL/TOKEN` (opcional), `CLIENTE_*` n/a (removidas `CLIENT_ID/SECRET`, `VENDEDOR_WHATSAPP`, `CORREIOS_*`) |
 
-## 9. Como rodar com Docker
+Templates: `backend/.env.example`, `frontend/.env.example`, `db.env.example`. **`.env` nunca entra no git.**
+
+## 9. Como rodar com Docker (dev local)
 
 ```bash
-cp backend/.env.example backend/.env   # preencher (seção 8)
-cp frontend/.env.example frontend/.env # opcional (padrões já servem no Docker)
+cp backend/.env.example .env        # preencher (seção 8); ou edite o .env raiz
+cp db.env.example db.env            # senha local
+# cp frontend/.env.example frontend/.env  # opcional
 docker compose up -d --build
-docker compose exec backend python migrate.py up      # aplica backend/migrations/
-docker compose exec backend python migrate.py status  # confere
+docker compose exec backend python migrate.py up
+docker compose exec backend python migrate.py status
 ```
 
 Acesse: frontend `http://localhost:8070` • API `http://localhost:8055/health`.
-Criar admin inicial e logs: ver `DEPLOY.md` (procedimento original mantido).
 
-> O `Dockerfile` do backend copia `api/`, `migrations/`, `migrate.py` e `schema.sql`,
-> e o do frontend faz build do React (Node 20) e serve o `dist/` no Nginx com fallback SPA.
-
-## 10. Como rodar local (dev)
+Criar admin inicial (hash Argon2):
 
 ```bash
-# Backend
-cd backend && poetry install && cp .env.example .env
-poetry run fastapi dev api/app.py        # http://localhost:8000 (ajuste o VITE_API_URL)
-
-# Frontend
-cd frontend && npm install && npm run dev # http://localhost:5173 (proxy /api e /uploads)
+docker compose exec backend python -c "
+import asyncio, asyncpg
+from api.security import get_password_hash
+async def main():
+    c = await asyncpg.connect('postgresql://loja_admin:SUASENHA@db:5432/loja_online')
+    await c.execute('''INSERT INTO admins (username, password, acesso, nome_completo)
+      VALUES (\$1, \$2, 'admin', 'Administrador') ON CONFLICT (username) DO NOTHING''',
+      'admin@loja.com', get_password_hash('troque-esta-senha'))
+    await c.close()
+asyncio.run(main())"
 ```
+
+## 10. Como rodar local sem Docker
+
+```bash
+cd backend && poetry install && cp .env.example ../.env  # ajuste DATABASE_URL p/ Neon ou local
+poetry run fastapi dev api/app.py        # http://localhost:8000
+cd ../frontend && npm install && npm run dev  # http://localhost:5173 (proxy /api)
+```
+
+Testes/lint backend: `poetry run ruff check api/` (+ `ruff format --check`).
 
 ## 11. Banco de dados e migrações
 
-- `backend/migrate.py up|status|down` + SQL versionado em `backend/migrations/`
-  (`002_entrega.sql`: colunas de frete/rastreio em `pedidos`, `tamanho` em `itens_pedido`,
-  tabelas `produto_tamanhos`, `produto_imagens`, `push_subscriptions` — idempotente).
-- O código tem fallback para bancos antigos sem as colunas de frete.
-- Tabelas principais: `usuarios`, `admins`, `clientes`, `produtos`, `produto_tamanhos`,
-  `produto_imagens`, `pedidos`, `itens_pedido`, `push_subscriptions`, `schema_migrations`.
+- Produção: **Neon** (schema aplicado via `schema.sql`; dados via dump sem `OWNER`).
+- `schema.sql` (raiz e `backend/`, sincronizados) = dump `--schema-only` canônico: 11 tabelas
+  (`admins`, `clientes`, `consentimentos`, `itens_pedido` (+`cor`), `pedidos`, `produto_imagens`,
+  `produto_tamanhos` (+`cor`, UNIQUE em `(produto_id,tamanho,cor)`), `produtos` (+`cor`),
+  `schema_migrations`, `usuarios`, `melhorenvio_tokens`, `push_subscriptions` via DDL runtime).
+- `backend/migrate.py up|status|down` + `backend/migrations/002_entrega.sql` (idempotente).
+- `push_subscriptions` é criada em runtime (`CREATE TABLE IF NOT EXISTS`).
 
 ## 12. Estrutura de pastas
 
 ```
-loja-online/
-├── README.md                  # este arquivo
-├── DEPLOY.md                  # guia original de deploy
-├── docker-compose.yml         # frontend :8070, backend :8055, postgres :5433
+JpCroco/                      # (repo; deploy branch -> Vercel)
+├── vercel.json               # services frontend/backend, regions gru1, rewrites /api
+├── README.md / DEPLOY.md
+├── .env / db.env             # LOCAIS, fora do git (.env.example / db.env.example no git)
+├── schema.sql                # dump canônico (espelho de backend/schema.sql)
+├── docker-compose.yml        # dev local: frontend :8070, backend :8055, pg :5433
 ├── frontend/
-│   ├── Dockerfile             # build React (Node 20) → Nginx (dist)
-│   ├── nginx.conf             # SPA + proxy /api/ e /uploads/
-│   ├── vite.config.js         # dev proxy p/ o backend local
-│   ├── public/sw.js           # push no aparelho do admin
+│   ├── Dockerfile / nginx.conf / vite.config.js
+│   ├── index.html / public/ (sw.js push, favicon, marca) / dist/ (build, fora do git)
 │   └── src/
-│       ├── api/client.js      # HTTP + frete/CEP/rastreio/pagamento (+protocoloPedido)
-│       ├── store/             # AuthContext, CartContext, ToastContext
-│       ├── hooks/useAdminNotify.js  # permissão, SW, VAPID, som/vibração
-│       ├── components/        # Header, Footer, ProductCard/Modal, CartDrawer,
-│       │                      # CheckoutModal (CEP+frete), PaymentModal (Brick+Pix), Tracking
-│       └── pages/             # Home, Loja, Login, Conta, MinhasCompras, Admin, ...
+│       ├── api/client.js     # HTTP + refresh silencioso + frete/CEP/rastreio/pagamento
+│       ├── store/            # AuthContext, CartContext (por usuário), ToastContext
+│       ├── hooks/useAdminNotify.js  # permissão, SW, VAPID, som/vibração/título
+│       ├── components/       # Header, Footer, ProductCard/Modal, SafeImg, ConfirmModal,
+│       │                     # CartDrawer, CheckoutModal (+bairro), PaymentModal (polling Pix)
+│       └── pages/            # Home, Loja, Login, Conta, MinhasCompras, Admin (+pop-up),
+│                             # RedefinirSenha, Politica
 └── backend/
-    ├── Dockerfile             # Python 3.13 + poetry (+migrations p/ migrate.py)
-    ├── migrate.py + migrations/
+    ├── Dockerfile / migrate.py / migrations/ / schema.sql
     └── api/
-        ├── app.py             # FastAPI + CORS + routers
-        ├── routers/           # login, usuarios, admins, produtos, cliente,
-        │                      # pedidos, itens_pedido, pagamento (/webhook+/payments),
-        │                      # frete, endereco, rastreio, push, upload, consent
-        └── services/          # correios (CWS), notificacao (e-mail/WhatsApp)
+        ├── app.py            # FastAPI + CORS + strip /api + lifespan sem pool
+        ├── database.py       # 1 conexão por requisição (serverless-safe) + kwargs Neon
+        ├── settings.py / security.py (JWT+Argon2, refresh 7 dias)
+        ├── routers/          # login, usuarios, admins, produtos, cliente, pedidos,
+        │                     # itens_pedido, pagamento (/webhook+/payments), frete
+        │                     # (+etiqueta, oauth, webhook ME), endereco, rastreio,
+        │                     # push, upload (Blob), consent
+        ├── services/         # superfrete, melhorenvio (+OAuth/tokens), notificacao
+        └── schemas/          # pydantic por recurso
 ```
 
-## 13. Troubleshooting
+## 13. Roadmap: refatoração e organização
 
-- **`POST /payments/process` 404:** o backend espera o path **sem** `/api`
-  (o Nginx remove). O router é `/payments` — não use `/api/payments` em chamadas internas.
-- **Brick não carrega / "Public Key não configurada":** confira `MERCADOPAGO_PUBLIC_KEY`
-  no `.env` do backend (`GET /webhook/public-key` deve retornar `TEST-`/`APP_USR-`); AdBlock
-  pode bloquear o SDK (`sdk.mercadopago.com/js/v2`).
-- **Pagamento recusado:** o toast traduz o `status_detail` (ex.: saldo insuficiente) — tente
-  outro cartão ou o Pix.
-- **Frete sempre "simulação":** configure `CORREIOS_USER/SENHA`; sem eles o cálculo usa a
-  fórmula local e avisa na tela.
-- **Push no aparelho não chega com site fechado:** exige HTTPS (ou localhost) + VAPID
-  configurado + permissão concedida; a barra 🔔 do painel informa o motivo. Com a página
-  aberta, o polling de 15s + som/vibração cobrem.
-- **CORS:** inclua a origem do frontend em `CORS_ORIGINS`.
-- **E-mail não envia:** Gmail exige senha de app; sem SMTP o pedido segue e o log avisa.
+> Aviso de direção — itens planejados, ainda não executados:
+
+1. **Organização de pastas**: separar `docs/` (manuais), `scripts/` (seed/admin/dev), `infra/`
+   (compose, nginx, vercel); mover `schema.sql` da raiz para `db/` ou `infra/`; avaliar
+   remover o espelho duplicado (`backend/schema.sql` × `schema.sql`).
+2. **Migrações como fonte única**: gerar `003_*.sql` (cores, OAuth ME, tokens) e aposentar
+   edição manual do `schema.sql`; `migrate.py down` real (rollback, não só marcação).
+3. **Testes**: suíte `pytest` (routers críticos: pagamento, frete, auth) + CI no push.
+4. **Frontend**: extrair `api/` por domínio, hook `usePedidos` no admin (Arquivo Admin.jsx grande),
+   e2e do checkout com Playwright.
+5. **Pagamentos**: conciliação periódica (job varre `pendente` antigos via `/payments/status`).
+6. **Frete**: rastreio automático SuperFrete + reimpressão de etiqueta pelo painel.
+
+## 14. Troubleshooting
+
+- **F5 em rota dá 404:** usamos HashRouter (`/#/admin`) — qualquer 404 em rota indica URL sem `#`
+  ou deploy antigo. Links internos usam `<Link>`; `window.location` cruas usam `/#/`.
+- **`/frete/calcular` 502 "token não configurado":** falta `SUPERFRETE_TOKEN` (ou ME) no ambiente.
+  Sem provedor não há chute de preço — configure e redeploye (env exige redeploy).
+- **Upload 502 com motivo do Blob:** store **privado** dá 400/403 — imagens de vitrine exigem
+  Blob store **público**; o endpoint valida legibilidade e explica.
+- **Pix não confirma:** polling cobre webhook perdido; `GET /payments/status/{id}` diz o estado
+  oficial. Pedidos `pendente` antigos não viram `Pago` sozinhos (webhook é event-driven).
+- **Push sem site fechado:** HTTPS + VAPID + permissão + *Ativar aparelho*; barra 🔔 diagnostica.
+- **Sessão cai:** só após 7 dias sem uso; antes disso o refresh silencioso renova.
+- **Tela branca após pagar:** era o `unmount()` do Brick (corrigido com `desmontarBrick()`).
+- ** `jwt` x `PyJWT`:** nunca instale o pacote `jwt` (sombra o PyJWT e quebra `DecodeError`).
+- **CORS:** origem do frontend em `CORS_ORIGINS`. **E-mail:** Gmail usa senha de app.
+- **Foto cortada na modal:** `object-fit: contain` + `display:block` (grid centralizado
+  transbordava); cards mantêm `cover` de propósito.
+
+## 15. Antes de deixar o repo público
+
+- [x] `.env`, `db.env`, dumps e hashes fora do git (`.gitignore` + `rm --cached`); só `*.example` versionados.
+- [ ] **Girar segredos que já passaram pelo histórico do git**: `SECRET_KEY`, senha do Postgres
+  local, tokens MP, VAPID, SMTP, Blob, Melhor Envio/SuperFrete, `WHATSAPP_TOKEN`. O `git rm`
+  não apaga o passado — sem rotação, o histórico expõe tudo.
+- [ ] Opcional: reescrever histórico (`git filter-repo`) ou squash público; e remover
+  `node_modules/` e `Page.tsx`/`Logo.jpeg` pendentes conforme decisão.
+- [ ] Preencher `MELHORENVIO_FROM_*` reais e `SUPERFRETE_*` de produção **só no dashboard**
+  da Vercel, nunca em arquivo.

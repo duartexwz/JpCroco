@@ -341,8 +341,12 @@ select {
 
 /* ---------- thumbs do editor de produto (admin) ---------- */
 .admin-thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-.admin-thumb { position: relative; width: 72px; height: 72px; }
-.admin-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; border: 1px solid var(--cinza-200); }
+.admin-thumb { position: relative; width: 72px; }
+.admin-thumb img { width: 100%; height: 72px; object-fit: cover; border-radius: 10px; border: 1px solid var(--cinza-200); display: block; }
+.admin-thumb input {
+  width: 100%; margin-top: 4px; padding: 4px 6px; font-size: .68rem;
+  border: 1px solid var(--cinza-200); border-radius: 6px;
+}
 .admin-thumb-capa {
   position: absolute; left: 4px; bottom: 4px; background: var(--verde); color: #fff;
   font-size: .62rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
@@ -448,6 +452,23 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: .86rem; min-width
 table.tbl th { text-align: left; padding: 10px 12px; color: var(--cinza-500); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--cinza-200); }
 table.tbl td { padding: 11px 12px; border-bottom: 1px solid var(--cinza-100); vertical-align: middle; }
 .tbl-img { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--cinza-100); }
+
+/* ---------- carrossel da modal do produto ---------- */
+.carousel { position: relative; touch-action: pan-y; }
+.carousel-seta {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 38px; height: 38px; border-radius: 50%;
+  background: rgba(255,255,255,.92); color: var(--preto); font-size: 1.5rem; line-height: 1;
+  display: grid; place-items: center; box-shadow: var(--shadow-md);
+}
+.carousel-seta.esq { left: 10px; }
+.carousel-seta.dir { right: 10px; }
+.carousel-seta:hover { background: #fff; }
+.carousel-pos {
+  position: absolute; right: 10px; bottom: 10px;
+  background: rgba(10,15,12,.65); color: #fff;
+  font-size: .72rem; font-weight: 700; padding: 3px 10px; border-radius: var(--r-full);
+}
 .row-actions { display: flex; gap: 6px; }
 .mini-btn { border: 1.5px solid var(--cinza-200); border-radius: 8px; padding: 7px 10px; font-size: .78rem; font-weight: 700; }
 .mini-btn:hover { border-color: var(--verde); color: var(--verde); }
@@ -535,6 +556,26 @@ table.tbl td { padding: 11px 12px; border-bottom: 1px solid var(--cinza-100); ve
   .toast { max-width: 100%; }
   .drawer { max-width: 100%; }
   .footer-grid { grid-template-columns: 1fr; gap: 20px; }
+  /* Tabela de produtos do admin vira cards: foto grande, infos rotuladas */
+  table.tbl-produtos { min-width: 0; }
+  table.tbl-produtos, table.tbl-produtos tbody { display: block; }
+  table.tbl-produtos thead { display: none; }
+  table.tbl-produtos tr.prod-row {
+    display: grid; grid-template-columns: 84px 1fr; gap: 4px 12px;
+    background: #fff; border: 1px solid var(--cinza-200); border-radius: var(--r-md);
+    padding: 12px; margin-bottom: 10px;
+  }
+  table.tbl-produtos tr.prod-row td { border: 0; padding: 2px 0; }
+  table.tbl-produtos tr.prod-row td.prod-foto { grid-row: span 4; align-self: start; }
+  table.tbl-produtos tr.prod-row td.prod-foto .tbl-img { width: 84px; height: 84px; border-radius: 12px; }
+  table.tbl-produtos tr.prod-row td[data-label]:not(.prod-foto)::before {
+    content: attr(data-label) ': '; font-size: .68rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .06em; color: var(--cinza-400);
+    display: block;
+  }
+  table.tbl-produtos tr.prod-row td:last-child { grid-column: 1 / -1; }
+  table.tbl-produtos tr.prod-row .row-actions { display: flex; gap: 8px; }
+  table.tbl-produtos tr.prod-row .row-actions .mini-btn { flex: 1; padding: 10px; text-align: center; }
 }
 @media (max-width: 420px) {
   .grid-products { grid-template-columns: 1fr 1fr; gap: 10px; }

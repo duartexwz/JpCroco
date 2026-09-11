@@ -40,15 +40,41 @@ async def _get_imagens(db: asyncpg.Connection, produto_id: int) -> list[str]:
     return urls
 
 
-async def _save_imagens(db: asyncpg.Connection, produto_id: int, imagens: list[str]) -> None:
-    """Substitui as imagens de um produto na tabela produto_imagens."""
+async def _get_fotos(db: asyncpg.Connection, produto_id: int) -> list[dict]:
+    rows = await db.fetch(
+        'SELECT url, cor FROM produto_imagens WHERE produto_id = $1 ORDER BY ordem, id',
+        produto_id,
+    )
+    fotos = [{'url': r['url'], 'cor': r['cor']} for r in rows]
+    if not fotos and produto_id:
+        cover = await db.fetchrow('SELECT imagem AS url, cor FROM produtos WHERE id = $1', produto_id)
+        if cover and cover['url']:
+            fotos = [{'url': cover['url'], 'cor': cover['cor']}]
+    return fotos
+
+
+def _foto_url(f) -> str | None:
+    return f.get('url') if isinstance(f, dict) else getattr(f, 'url', None)
+
+
+def _foto_cor(f):
+    return f.get('cor') if isinstance(f, dict) else getattr(f, 'cor', None)
+
+
+def _norm_fotos(imagens: list, fotos: list | None) -> list[dict]:
+    """Normaliza para [{url, cor}]: fotos prevalecem; senão cor=None."""
+    if fotos:
+        return [{'url': _foto_url(f), 'cor': _foto_cor(f) or None} for f in fotos if _foto_url(f)]
+    return [{'url': u, 'cor': None} for u in (imagens or []) if u]
+
+
+async def _save_imagens(db: asyncpg.Connection, produto_id: int, imagens: list[str], fotos: list | None = None) -> None:
+    """Substitui as imagens de um produto na tabela produto_imagens (com cor)."""
     await db.execute('DELETE FROM produto_imagens WHERE produto_id = $1', produto_id)
-    for i, url in enumerate(imagens):
-        if not url:
-            continue
+    for i, f in enumerate(_norm_fotos(imagens, fotos)):
         await db.execute(
-            'INSERT INTO produto_imagens (produto_id, url, ordem) VALUES ($1, $2, $3)',
-            produto_id, url, i,
+            'INSERT INTO produto_imagens (produto_id, url, ordem, cor) VALUES ($1, $2, $3, $4)',
+            produto_id, f['url'], i, f['cor'],
         )
 
 
@@ -56,6 +82,7 @@ async def _serialize(db: asyncpg.Connection, produto: dict) -> dict:
     dados = dict(produto)
     dados['tamanhos'] = await _get_tamanhos(db, produto['id'])
     dados['imagens'] = await _get_imagens(db, produto['id'])
+    dados['fotos'] = await _get_fotos(db, produto['id'])
     return dados
 
 
@@ -90,12 +117,15 @@ async def create_produto(produto: ProdutosSchema, db: database_loja, current_use
     stock_base = sum(t.stock for t in tamanhos) if tamanhos else 0
 
     imagens = produto.imagens or ([produto.imagem] if produto.imagem else [])
+    fotos = produto.fotos or []
+    if not imagens and fotos:
+        imagens = [_foto_url(f) for f in fotos if _foto_url(f)]
     imagem_cover = imagens[0] if imagens else None
 
     insert_query = """
-    INSERT INTO produtos (nome, preco, tamanho, stock, imagem, preco_promocional, cor)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
-    RETURNING id, nome, preco, tamanho, stock, imagem, preco_promocional, cor
+    INSERT INTO produtos (nome, preco, tamanho, stock, imagem, preco_promocional, cor, categoria)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    RETURNING id, nome, preco, tamanho, stock, imagem, preco_promocional, cor, categoria
     """
     result = await db.fetchrow(
         insert_query,
@@ -106,6 +136,7 @@ async def create_produto(produto: ProdutosSchema, db: database_loja, current_use
         imagem_cover,
         produto.preco_promocional,
         produto.cor,
+        produto.categoria,
     )
 
     if not result:
@@ -123,14 +154,14 @@ async def create_produto(produto: ProdutosSchema, db: database_loja, current_use
         )
 
     if imagens:
-        await _save_imagens(db, produto_id, imagens)
+        await _save_imagens(db, produto_id, imagens, fotos or None)
 
     return await _serialize(db, result)
 
 
 @router.get('/', response_model=ProdutosList, status_code=HTTPStatus.OK)
 async def listar_produtos(filtrar: Annotated[FilterProdutos, Depends()], db: database_loja):
-    query = 'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional, cor FROM produtos WHERE 1=1'
+    query = 'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional, cor, categoria FROM produtos WHERE 1=1'
     params = []
     param_index = 1
 
@@ -154,6 +185,11 @@ async def listar_produtos(filtrar: Annotated[FilterProdutos, Depends()], db: dat
         params.append(filtrar.tamanho)
         param_index += 1
 
+    if filtrar.categoria:
+        query += f' AND categoria = ${param_index}'
+        params.append(filtrar.categoria)
+        param_index += 1
+
     if filtrar.stock_min is not None:
         query += f' AND stock >= ${param_index}'
         params.append(filtrar.stock_min)
@@ -174,6 +210,7 @@ async def listar_produtos(filtrar: Annotated[FilterProdutos, Depends()], db: dat
     ids = [row['id'] for row in result]
     tams_by: dict[int, list] = {}
     imgs_by: dict[int, list] = {}
+    fotos_by: dict[int, list] = {}
     if ids:
         for t in await db.fetch(
             'SELECT produto_id, tamanho, stock, preco, cor FROM produto_tamanhos WHERE produto_id = ANY($1::bigint[]) ORDER BY id',
@@ -181,23 +218,26 @@ async def listar_produtos(filtrar: Annotated[FilterProdutos, Depends()], db: dat
         ):
             tams_by.setdefault(t['produto_id'], []).append({'tamanho': t['tamanho'], 'stock': t['stock'], 'preco': t['preco'], 'cor': t['cor']})
         for im in await db.fetch(
-            'SELECT produto_id, url FROM produto_imagens WHERE produto_id = ANY($1::bigint[]) ORDER BY ordem, id',
+            'SELECT produto_id, url, cor FROM produto_imagens WHERE produto_id = ANY($1::bigint[]) ORDER BY ordem, id',
             ids,
         ):
             imgs_by.setdefault(im['produto_id'], []).append(im['url'])
+            fotos_by.setdefault(im['produto_id'], []).append({'url': im['url'], 'cor': im['cor']})
         sem_img = [i for i in ids if i not in imgs_by]
         if sem_img:
             for cover in await db.fetch(
-                'SELECT id, imagem FROM produtos WHERE id = ANY($1::bigint[]) AND imagem IS NOT NULL',
+                'SELECT id, imagem, cor FROM produtos WHERE id = ANY($1::bigint[]) AND imagem IS NOT NULL',
                 sem_img,
             ):
                 imgs_by.setdefault(cover['id'], []).append(cover['imagem'])
+                fotos_by.setdefault(cover['id'], []).append({'url': cover['imagem'], 'cor': cover['cor']})
 
     produtos = []
     for row in result:
         dados = dict(row)
         dados['tamanhos'] = tams_by.get(row['id'], [])
         dados['imagens'] = imgs_by.get(row['id'], [])
+        dados['fotos'] = fotos_by.get(row['id'], [])
         produtos.append(dados)
 
     return {'produtos': produtos}
@@ -222,9 +262,10 @@ async def atualizar_produto(produto_id: int, produto: ProdutosUpdate, db: databa
     update_data = produto.model_dump(exclude_unset=True)
     update_veio = bool(update_data)
     tem_tamanhos = 'tamanhos' in update_data and update_data['tamanhos'] is not None
-    tem_imagens = 'imagens' in update_data and update_data['imagens'] is not None
+    tem_imagens = ('imagens' in update_data and update_data['imagens'] is not None) or ('fotos' in update_data and update_data['fotos'] is not None)
     update_data.pop('tamanhos', None)
     update_data.pop('imagens', None)
+    update_data.pop('fotos', None)
 
     if not update_data and not tem_tamanhos and not tem_imagens:
         raise HTTPException(
@@ -249,7 +290,7 @@ async def atualizar_produto(produto_id: int, produto: ProdutosUpdate, db: databa
             UPDATE produtos
             SET {set_query}
             WHERE id = ${param_index}
-            RETURNING id, nome, preco, tamanho, stock, imagem, preco_promocional, cor
+            RETURNING id, nome, preco, tamanho, stock, imagem, preco_promocional, cor, categoria
         """
 
         result = await db.fetchrow(query, *params)
@@ -261,7 +302,7 @@ async def atualizar_produto(produto_id: int, produto: ProdutosUpdate, db: databa
             )
     else:
         result = await db.fetchrow(
-            'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional, cor FROM produtos WHERE id = $1',
+            'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional, cor, categoria FROM produtos WHERE id = $1',
             produto_id,
         )
 
@@ -282,19 +323,21 @@ async def atualizar_produto(produto_id: int, produto: ProdutosUpdate, db: databa
             stock_total, tam_base, produto_id,
         )
         result = await db.fetchrow(
-            'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional, cor FROM produtos WHERE id = $1',
+            'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional, cor, categoria FROM produtos WHERE id = $1',
             produto_id,
         )
 
     if tem_imagens:
-        await _save_imagens(db, produto_id, produto.imagens)
-        nova_cover = produto.imagens[0] if produto.imagens else None
+        fotos = produto.fotos if produto.fotos is not None else None
+        await _save_imagens(db, produto_id, produto.imagens or [], fotos)
+        base_urls = [_foto_url(f) for f in (produto.fotos or [])] or (produto.imagens or [])
+        nova_cover = base_urls[0] if base_urls else None
         await db.execute(
             'UPDATE produtos SET imagem = $1 WHERE id = $2',
             nova_cover, produto_id,
         )
         result = await db.fetchrow(
-            'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional, cor FROM produtos WHERE id = $1',
+            'SELECT id, nome, preco, tamanho, stock, imagem, preco_promocional, cor, categoria FROM produtos WHERE id = $1',
             produto_id,
         )
 

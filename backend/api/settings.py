@@ -15,8 +15,6 @@ class Settings(BaseSettings):
     DB_POOL_MIN_SIZE: int = 0
     DB_POOL_MAX_SIZE: int = 1
     ACCESS_TOKEN_EXPIRE_MINUTES: int
-    CLIENT_SECRET: str
-    CLIENT_ID: int
     SECRET_KEY: str
     ALGORITHM: str
     MERCADOPAGO_ACCESS_TOKEN: str
@@ -66,7 +64,6 @@ class Settings(BaseSettings):
 
     WHATSAPP_API_URL: str = ''
     WHATSAPP_TOKEN: str = ''
-    VENDEDOR_WHATSAPP: str = '5561999999999'
 
     SMTP_HOST: str = 'smtp.gmail.com'
     SMTP_PORT: int = 587

@@ -10,13 +10,20 @@ class TamanhoSchema(BaseModel):
     cor: Optional[str] = None
 
 
+class FotoSchema(BaseModel):
+    url: str
+    cor: Optional[str] = None
+
+
 class ProdutosSchema(BaseModel):
     nome: str
     preco: float
     imagem: Optional[str] = None
     imagens: Optional[list[str]] = None
+    fotos: Optional[list[FotoSchema]] = None
     preco_promocional: Optional[float] = None
     cor: Optional[str] = None
+    categoria: Optional[str] = None
     tamanhos: list[TamanhoSchema] = []
 
 
@@ -30,8 +37,10 @@ class ProdutosResponse(BaseModel):
     stock: int = 0
     imagem: Optional[str] = None
     imagens: list[str] = []
+    fotos: list[FotoSchema] = []
     preco_promocional: Optional[float] = None
     cor: Optional[str] = None
+    categoria: Optional[str] = None
     tamanhos: list[TamanhoSchema] = []
 
 
@@ -40,8 +49,10 @@ class ProdutosUpdate(BaseModel):
     preco: Optional[float] = None
     imagem: Optional[str] = None
     imagens: Optional[list[str]] = None
+    fotos: Optional[list[FotoSchema]] = None
     preco_promocional: Optional[float] = None
     cor: Optional[str] = None
+    categoria: Optional[str] = None
     tamanhos: Optional[list[TamanhoSchema]] = None
 
 
@@ -64,6 +75,7 @@ class FilterProdutos(BaseModel):
     preco_min: float | None = None
     preco_max: float | None = None
     tamanho: str | None = None
+    categoria: str | None = None
     stock_min: int | None = None
     stock_max: int | None = None
     offset: int | None = 0

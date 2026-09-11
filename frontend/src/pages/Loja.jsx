@@ -7,7 +7,7 @@ export default function Loja({ onOpenCart }) {
   const [produtos, setProdutos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
-  const [filtro, setFiltro] = useState('todos');
+  const [filtro, setFiltro] = useState('todas');
   const [busca, setBusca] = useState('');
   const [detalhe, setDetalhe] = useState(null);
 
@@ -26,20 +26,19 @@ export default function Loja({ onOpenCart }) {
 
   useEffect(() => { carregar(); }, []);
 
-  const tamanhos = useMemo(() => {
-    const s = new Set();
+  const categorias = useMemo(() => {
+    const s = [];
     produtos.forEach((p) => {
-      if (p.tamanhos?.length) p.tamanhos.forEach((t) => s.add(t.tamanho));
-      else if (p.tamanho) s.add(p.tamanho);
+      const c = (p.categoria || '').trim();
+      if (c && !s.includes(c)) s.push(c);
     });
-    return [...s];
+    return s;
   }, [produtos]);
 
   const filtrados = produtos.filter((p) => {
-    const okTam = filtro === 'todos'
-      || (p.tamanhos?.length ? p.tamanhos.some((t) => t.tamanho === filtro) : p.tamanho === filtro);
+    const okCat = filtro === 'todas' || (p.categoria || '').trim() === filtro;
     const okBusca = !busca.trim() || p.nome.toLowerCase().includes(busca.toLowerCase().trim());
-    return okTam && okBusca;
+    return okCat && okBusca;
   });
 
   return (
@@ -54,9 +53,9 @@ export default function Loja({ onOpenCart }) {
       <div className="container" style={{ paddingBottom: 48 }}>
         <div className="filters-bar">
           <div className="filters-btns">
-            <button className={`filter-btn${filtro === 'todos' ? ' active' : ''}`} onClick={() => setFiltro('todos')}>Todos</button>
-            {tamanhos.map((t) => (
-              <button key={t} className={`filter-btn${filtro === t ? ' active' : ''}`} onClick={() => setFiltro(t)}>{t}</button>
+            <button className={`filter-btn${filtro === 'todas' ? ' active' : ''}`} onClick={() => setFiltro('todas')}>Todas</button>
+            {categorias.map((c) => (
+              <button key={c} className={`filter-btn${filtro === c ? ' active' : ''}`} onClick={() => setFiltro(c)}>{c}</button>
             ))}
           </div>
           <div className="search-box">🔎<input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar produto..." /></div>

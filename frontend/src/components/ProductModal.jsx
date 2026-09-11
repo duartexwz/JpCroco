@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api } from '../api/client';
 import SafeImg from './SafeImg';
 import { useCart } from '../store/CartContext';
@@ -11,9 +11,14 @@ export default function ProductModal({ produto, onClose }) {
   const [corSel, setCorSel] = useState('');
   const [qtd, setQtd] = useState(1);
   const [imgIdx, setImgIdx] = useState(0);
+  const toqueX = useRef(null);
 
   if (!produto) return null;
   const imagens = produto.imagens?.length ? produto.imagens : (produto.imagem ? [produto.imagem] : []);
+  // Fotos com cor: a principal acompanha a cor escolhida.
+  const fotos = produto.fotos?.length
+    ? produto.fotos
+    : imagens.map((u) => ({ url: u, cor: null }));
   const temPromo = produto.preco_promocional != null && Number(produto.preco_promocional) < Number(produto.preco);
   const semEstoque = (produto.stock ?? 0) <= 0;
   // Cores vindas das variantes (tamanho+cor). Sem variante de cor: comportamento antigo.
@@ -23,7 +28,20 @@ export default function ProductModal({ produto, onClose }) {
     : (produto.tamanhos || []);
   const precisaTamanho = tamanhosVisiveis.length > 0;
 
-  const escolherCor = (c) => { setCorSel(c); setTamanho(''); };
+  const irPara = (i) => setImgIdx(((i % fotos.length) + fotos.length) % fotos.length);
+  const escolherCor = (c) => {
+    setCorSel(c);
+    setTamanho('');
+    const idx = fotos.findIndex((f) => (f.cor || '') === c);
+    if (idx >= 0) setImgIdx(idx);
+  };
+  const onToqueFim = (e) => {
+    if (toqueX.current == null) return;
+    const dx = e.changedTouches[0].clientX - toqueX.current;
+    toqueX.current = null;
+    if (Math.abs(dx) < 40 || fotos.length < 2) return;
+    irPara(imgIdx + (dx < 0 ? 1 : -1));
+  };
   const comprar = () => {
     if (coresDisponiveis.length && !corSel) {
       toast('Escolha uma cor.', 'error');
@@ -46,22 +64,34 @@ export default function ProductModal({ produto, onClose }) {
           <button className="icon-btn" onClick={() => onClose(false)}>✕</button>
         </div>
         <div className="drawer-body">
-          <div className="product-img product-img-full" style={{ borderRadius: 14, aspectRatio: '4/3', maxHeight: '62vh', margin: '0 auto', width: '100%' }}>
-            {imagens[imgIdx] ? (
+          <div
+            className="product-img product-img-full carousel"
+            style={{ borderRadius: 14, aspectRatio: '4/3', maxHeight: '62vh', margin: '0 auto', width: '100%' }}
+            onTouchStart={(e) => { toqueX.current = e.changedTouches[0].clientX; }}
+            onTouchEnd={onToqueFim}
+          >
+            {fotos[imgIdx] ? (
               <SafeImg
-                src={imagens[imgIdx]}
+                src={fotos[imgIdx].url}
                 alt={produto.nome}
                 style={{ width: '100%', height: '100%', objectFit: 'contain', background: 'var(--cinza-100)' }}
               />
             ) : <span>🐊</span>}
+            {fotos.length > 1 && (
+              <>
+                <button type="button" className="carousel-seta esq" aria-label="Foto anterior" onClick={() => irPara(imgIdx - 1)}>‹</button>
+                <button type="button" className="carousel-seta dir" aria-label="Próxima foto" onClick={() => irPara(imgIdx + 1)}>›</button>
+                <span className="carousel-pos">{imgIdx + 1}/{fotos.length}</span>
+              </>
+            )}
           </div>
           {produto.cor && !coresDisponiveis.length && (
             <p style={{ marginTop: 10, fontSize: '.88rem', color: 'var(--cinza-600)' }}>Cor: <b>{produto.cor}</b></p>
           )}
-          {imagens.length > 1 && (
+          {fotos.length > 1 && (
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              {imagens.map((u, i) => (
-                <SafeImg key={i} src={u} alt="" onClick={() => setImgIdx(i)}
+              {fotos.map((f, i) => (
+                <SafeImg key={i} src={f.url} alt="" onClick={() => setImgIdx(i)}
                   style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, cursor: 'pointer', border: i === imgIdx ? '2px solid var(--verde)' : '1px solid var(--cinza-200)' }} />
               ))}
             </div>

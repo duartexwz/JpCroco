@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict QQ9CaRTdeSxdnJZYkpzQy2liBLgoSKUcqLnoUMv7nJnMMNcEgwfDh65czhNoaEL
+\restrict bO8Ou1KlQvdGISZLf28XmnvcGb7Rn1ngbMWx7PYm6tjNNEulYidL7gFYkjPYFgX
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -666,5 +666,5 @@ ALTER TABLE ONLY public.produto_tamanhos
 -- PostgreSQL database dump complete
 --
 
-\unrestrict QQ9CaRTdeSxdnJZYkpzQy2liBLgoSKUcqLnoUMv7nJnMMNcEgwfDh65czhNoaEL
+\unrestrict bO8Ou1KlQvdGISZLf28XmnvcGb7Rn1ngbMWx7PYm6tjNNEulYidL7gFYkjPYFgX
 

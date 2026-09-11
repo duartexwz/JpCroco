@@ -8,12 +8,16 @@ dist/
 build/
 .eggs/
 
-# Ambiente
-.env
-.env.local
-.env.production
+# Ambiente - NUNCA commite segredos (.env, chaves, dumps com hash).
+# Só templates *.example entram no git.
+.env*
 !.env.example
-!.env.test
+db.env
+!db.env.example
+senha_admin_login.txt
+backup.sql
+*.pem
+*.key
 
 # Virtualenv
 .venv/
@@ -42,7 +46,8 @@ docker-compose.override.yml
 Thumbs.db
 
 # Frontend
+node_modules/
 frontend/node_modules/
 frontend/.cache/
+frontend/dist/
 .vercel
-.env*
