@@ -645,10 +645,12 @@ function ProdutoModal({ produto, onClose, onSave }) {
               <div className="admin-thumbs">
                 {fotos.map((f, i) => (
                   <div className="admin-thumb" key={`${i}-${f.url}`}>
-                    <img src={f.url} alt="" onError={(e) => { e.currentTarget.style.opacity = '.25'; }} />
-                    {i === 0 && <span className="admin-thumb-capa">Capa</span>}
-                    <button type="button" className="admin-thumb-x" title="Remover"
-                      onClick={() => setFotos(fotos.filter((_, j) => j !== i))}>✕</button>
+                    <div className="admin-thumb-img">
+                      <img src={f.url} alt="" onError={(e) => { e.currentTarget.style.opacity = '.25'; }} />
+                      {i === 0 && <span className="admin-thumb-capa">Capa</span>}
+                      <button type="button" className="admin-thumb-x" title="Remover"
+                        onClick={() => setFotos(fotos.filter((_, j) => j !== i))}>✕</button>
+                    </div>
                     <input value={f.cor || ''} maxLength={30} placeholder="Cor" title="Cor desta foto (mostrada ao escolher a cor)"
                       onChange={(e) => setFotos(fotos.map((x, j) => j === i ? { ...x, cor: e.target.value } : x))} />
                   </div>
